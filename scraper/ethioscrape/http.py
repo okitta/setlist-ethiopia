@@ -83,8 +83,19 @@ class PoliteClient:
         return rp.can_fetch(self.session.headers["User-Agent"], url)
 
     # -- requests ----------------------------------------------------------
-    def _request(self, url: str, *, headers: dict | None = None, params: dict | None = None):
-        if not self._allowed(url):
+    def _request(
+        self,
+        url: str,
+        *,
+        headers: dict | None = None,
+        params: dict | None = None,
+        check_robots: bool = True,
+    ):
+        # robots.txt governs crawling web *pages*, not documented REST APIs. API
+        # sources (MusicBrainz, setlist.fm) pass check_robots=False — they are used
+        # per their own published terms (rate limit + User-Agent). The generic HTML
+        # scraper keeps the default and honours robots.txt.
+        if check_robots and not self._allowed(url):
             raise PermissionError(f"robots.txt disallows fetching {url}")
         host = urlsplit(url).netloc
         last_exc: Exception | None = None
@@ -108,9 +119,25 @@ class PoliteClient:
             return resp
         raise FetchError(f"failed to fetch {url}: {last_exc}", status=None)
 
-    def get_json(self, url: str, *, headers: dict | None = None, params: dict | None = None):
-        resp = self._request(url, headers=headers, params=params)
+    def get_json(
+        self,
+        url: str,
+        *,
+        headers: dict | None = None,
+        params: dict | None = None,
+        check_robots: bool = True,
+    ):
+        resp = self._request(url, headers=headers, params=params, check_robots=check_robots)
         return resp.json()
 
-    def get_text(self, url: str, *, headers: dict | None = None, params: dict | None = None) -> str:
-        return self._request(url, headers=headers, params=params).text
+    def get_text(
+        self,
+        url: str,
+        *,
+        headers: dict | None = None,
+        params: dict | None = None,
+        check_robots: bool = True,
+    ) -> str:
+        return self._request(
+            url, headers=headers, params=params, check_robots=check_robots
+        ).text

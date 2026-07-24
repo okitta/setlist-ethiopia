@@ -14,7 +14,7 @@ class _FakeClient:
     def __init__(self):
         self.calls = 0
 
-    def get_json(self, url, headers=None, params=None):
+    def get_json(self, url, headers=None, params=None, check_robots=True):
         self.calls += 1
         return {"setlist": fixtures.SFM_SETLISTS[:1], "itemsPerPage": 20, "total": 1}
 

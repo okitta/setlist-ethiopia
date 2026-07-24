@@ -82,6 +82,7 @@ def collect(
                 f"{MB_BASE}/artist",
                 headers={"Accept": "application/json"},
                 params={"query": term, "fmt": "json", "limit": 100, "offset": offset},
+                check_robots=False,  # documented API, not a crawlable page
             )
             hits = page.get("artists", [])
             if not hits:
@@ -95,6 +96,7 @@ def collect(
                     f"{MB_BASE}/artist/{mbid}",
                     headers={"Accept": "application/json"},
                     params={"fmt": "json", "inc": "aliases+genres+tags"},
+                    check_robots=False,  # documented API, not a crawlable page
                 )
                 ds.add_artist(parse_artist(doc))
                 if len(seen_ids) >= limit:
