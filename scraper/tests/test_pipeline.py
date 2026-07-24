@@ -70,3 +70,14 @@ def test_to_dict_is_json_serialisable():
     ds = fixtures.build_sample_dataset()
     text = json.dumps(ds.to_dict(), ensure_ascii=False)
     assert "ሙላቱ አስታጥቄ" in text  # native names survive round-trip
+
+
+def test_load_rejects_non_postgres_url():
+    """A Supabase project URL (https://...) must fail fast with a clear message,
+    not SQLAlchemy's cryptic 'Can't load plugin: sqlalchemy.dialects:https'."""
+    import pytest
+
+    from ethioscrape.db import load
+
+    with pytest.raises(ValueError, match="Postgres connection string"):
+        load(Dataset(), "https://abcd1234.supabase.co")
