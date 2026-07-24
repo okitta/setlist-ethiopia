@@ -41,6 +41,39 @@ jobs:
       - name: Dependency audit
         run: pip-audit -r requirements.txt || true  # advisory: report, do not hard-fail slice 1
 
+  scraper:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scraper
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: setlist
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest==8.3.4
+      - name: Apply canonical schema to test Postgres
+        run: psql "postgresql://postgres:test@localhost:5432/setlist" -f ../docs/database/canonical_supabase_schema.sql
+      - name: Tests (offline + loader against Postgres)
+        env:
+          # Un-skips tests/test_loader.py so the DB loader is exercised in CI.
+          SCRAPER_TEST_DATABASE_URL: postgresql+psycopg://postgres:test@localhost:5432/setlist
+        run: python -m pytest
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

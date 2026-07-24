@@ -23,6 +23,7 @@ def check_api_key(client: PoliteClient, api_key: str) -> dict:
             f"{SFM_BASE}/search/artists",
             headers=headers,
             params={"artistName": "Mulatu Astatke", "sort": "relevance", "p": 1},
+            check_robots=False,  # documented API (key-authenticated)
         )
     except FetchError as exc:
         reason = "invalid or unauthorised API key" if exc.status == 401 else str(exc)
@@ -128,6 +129,7 @@ def collect(
                     f"{SFM_BASE}/artist/{mbid}/setlists",
                     headers=headers,
                     params={"p": page},
+                    check_robots=False,  # documented API (key-authenticated)
                 )
             except FetchError:
                 # 404 = artist has no setlists; still counts as a spent request.
