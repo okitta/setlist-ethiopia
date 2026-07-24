@@ -1,9 +1,26 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type View = "home" | "explore" | "saved" | "profile";
 type ExploreFilter = "All" | "Events" | "Artists" | "Venues";
+type ContributionInput = { artist: string; date: string; venue: string; songs: string; source: string };
+type CommunityPerformance = {
+  id: number;
+  submitted_artist: string | null;
+  submitted_venue: string | null;
+  performance_date: string;
+  status: string;
+  created_at: string;
+  setlist_items?: Array<{ id: number }>;
+};
+
+async function fetchCommunityPerformances() {
+  const response = await fetch("/api/contributions", { cache: "no-store" });
+  if (!response.ok) throw new Error("The community feed is unavailable.");
+  const body = await response.json() as { performances?: CommunityPerformance[] };
+  return body.performances ?? [];
+}
 
 const events = [
   {
@@ -94,7 +111,47 @@ export function ZemaApp() {
   const [showAdd, setShowAdd] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [notice, setNotice] = useState("");
-  const [submitted, setSubmitted] = useState(0);
+  const [communityPerformances, setCommunityPerformances] = useState<CommunityPerformance[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchCommunityPerformances()
+      .then((performances) => {
+        if (active) setCommunityPerformances(performances);
+      })
+      .catch(() => {
+        // The curated archive remains usable if the community feed is temporarily unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function submitContribution(input: ContributionInput) {
+    const accessToken = window.localStorage.getItem("zema-access-token");
+    if (!accessToken) throw new Error("Please sign in before submitting a contribution.");
+
+    const response = await fetch("/api/contributions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.localStorage.removeItem("zema-access-token");
+        window.localStorage.removeItem("zema-refresh-token");
+      }
+      throw new Error(body.error ?? "The contribution could not be saved.");
+    }
+
+    setCommunityPerformances(await fetchCommunityPerformances());
+    setShowAdd(false);
+    setNotice("Contribution saved for community review");
+  }
 
   function persist(key: string, value: string[]) {
     window.localStorage.setItem(key, JSON.stringify(value));
@@ -189,8 +246,8 @@ export function ZemaApp() {
               <div className="content-section">
                 <SectionHeading eyebrow="RECENTLY DOCUMENTED" title="Fresh from the archive" action="Explore all setlists" onAction={() => setView("explore")} inverse />
                 <div className="setlist-table">
-                  {recentSets.map((set, index) => (
-                    <article className="setlist-row" key={set.artist}>
+                  {[...communityPerformances.map(toRecentSet), ...recentSets].slice(0, 20).map((set, index) => (
+                    <article className="setlist-row" key={`${set.artist}-${set.date}-${index}`}>
                       <div className="set-number">0{index + 1}</div>
                       <div className="set-identity"><strong>{set.artist}</strong><span>{set.native}</span></div>
                       <div className="set-place"><strong>{set.venue}</strong><span>{set.city}</span></div>
@@ -340,7 +397,7 @@ export function ZemaApp() {
         <button className={view === "profile" ? "active" : ""} onClick={() => setView("profile")}><Icon>○</Icon>Profile</button>
       </nav>
 
-      {showAdd && <ContributionModal onClose={() => setShowAdd(false)} onSubmit={() => { setSubmitted(submitted + 1); setShowAdd(false); setNotice("Contribution saved for community review"); }} />}
+      {showAdd && <ContributionModal onClose={() => setShowAdd(false)} onSubmit={submitContribution} onSignIn={() => { setShowAdd(false); setShowAuth(true); }} />}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
       {notice && <div className="toast" role="status"><span>✓</span>{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
     </div>
@@ -355,6 +412,21 @@ function readDeviceList(key: string): string[] {
   } catch {
     return [];
   }
+}
+
+function toRecentSet(performance: CommunityPerformance) {
+  const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(performance.performance_date));
+  const confidence = performance.status === "source_backed" ? "Source backed" : "Community submitted";
+  return {
+    artist: performance.submitted_artist || "Unknown artist",
+    native: "Community contribution",
+    venue: performance.submitted_venue || "Unknown venue",
+    city: "Pending community review",
+    date,
+    songs: performance.setlist_items?.length ?? 0,
+    confidence,
+  };
 }
 
 function SearchBox({ query, setQuery, results, large = false }: { query: string; setQuery: (value: string) => void; results: { type: string; title: string; meta: string }[]; large?: boolean }) {
@@ -398,19 +470,31 @@ function EmptyState({ mark, title, copy, action, onAction }: { mark: string; tit
   return <div className="empty-state"><span>{mark}</span><h2>{title}</h2><p>{copy}</p><button onClick={onAction}>{action} →</button></div>;
 }
 
-function ContributionModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+function ContributionModal({ onClose, onSubmit, onSignIn }: { onClose: () => void; onSubmit: (input: ContributionInput) => Promise<void>; onSignIn: () => void }) {
   const [step, setStep] = useState(1);
   const [artist, setArtist] = useState("");
   const [date, setDate] = useState("");
   const [venue, setVenue] = useState("");
   const [songs, setSongs] = useState("");
   const [source, setSource] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const canContinue = step === 1 ? artist.trim().length > 1 : step === 2 ? Boolean(date && venue.trim()) : true;
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (step < 5) setStep(step + 1);
-    else onSubmit();
+    if (step < 5) {
+      setStep(step + 1);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSubmit({ artist, date, venue, songs, source });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The contribution could not be saved.");
+      setSaving(false);
+    }
   }
 
   return (
@@ -429,9 +513,10 @@ function ContributionModal({ onClose, onSubmit }: { onClose: () => void; onSubmi
           {step === 3 && <label>Songs in order<span>One song per line. Partial lists and “unknown song” are welcome.</span><textarea value={songs} onChange={(e) => setSongs(e.target.value)} placeholder={"Tizita\nYègellé Tezeta\nUnknown song\nYekermo Sew"} rows={7} /></label>}
           {step === 4 && <label>Source or memory note<span>A poster, article, video link, ticket, or first-hand memory helps others verify the record.</span><textarea value={source} onChange={(e) => setSource(e.target.value)} placeholder="I attended this performance, or paste a public source link..." rows={5} /></label>}
           {step === 5 && <div className="review-card"><div><span>Artist</span><strong>{artist}</strong></div><div><span>Date & venue</span><strong>{date} · {venue}</strong></div><div><span>Setlist</span><strong>{songs ? `${songs.split("\n").filter(Boolean).length} songs added` : "No songs yet — can be added later"}</strong></div><div><span>Evidence</span><strong>{source || "First-hand community submission"}</strong></div><p>✓ Your contribution will be public and attributed after community review. Your email is never displayed.</p></div>}
+          {error && <p className="form-error" role="alert">{error} {error.startsWith("Please sign in") && <button type="button" onClick={onSignIn}>Sign in now</button>}</p>}
           <div className="modal-actions">
-            {step > 1 && <button type="button" className="secondary-action" onClick={() => setStep(step - 1)}>Back</button>}
-            <button type="submit" className="primary-action" disabled={!canContinue}>{step === 5 ? "Submit for review" : "Continue"} <span>→</span></button>
+            {step > 1 && <button type="button" className="secondary-action" onClick={() => setStep(step - 1)} disabled={saving}>Back</button>}
+            <button type="submit" className="primary-action" disabled={!canContinue || saving}>{saving ? "Saving…" : step === 5 ? "Submit for review" : "Continue"} <span>→</span></button>
           </div>
         </form>
         <small className="draft-note">Draft progress is kept while this form is open. Never upload private or copyrighted material without permission.</small>

@@ -27,7 +27,7 @@ async function authenticatedUser(request: Request) {
 export async function GET() {
   try {
     const response = await fetch(
-      getSupabaseRestUrl("performances?select=id,submitted_artist,submitted_venue,performance_date,status,created_at&order=created_at.desc&limit=20"),
+      getSupabaseRestUrl("performances?select=id,submitted_artist,submitted_venue,performance_date,status,created_at,setlist_items(id)&order=created_at.desc&limit=20"),
       { headers: getSupabaseAdminHeaders(), cache: "no-store" },
     );
     if (!response.ok) throw new Error("Database request failed.");
@@ -88,14 +88,15 @@ export async function POST(request: Request) {
     const [performance] = await performanceResponse.json() as Array<{ id: number; status: string }>;
 
     if (songLines.length) {
-      await fetch(getSupabaseRestUrl("setlist_items"), {
+      const setlistResponse = await fetch(getSupabaseRestUrl("setlist_items"), {
         method: "POST",
         headers,
         body: JSON.stringify(songLines.map((title, index) => ({ performance_id: performance.id, position: index + 1, title }))),
       });
+      if (!setlistResponse.ok) throw new Error("Unable to save the setlist.");
     }
 
-    await fetch(getSupabaseRestUrl("revisions"), {
+    const revisionResponse = await fetch(getSupabaseRestUrl("revisions"), {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
         after_json: JSON.stringify({ artist, venue, date, songs: songLines, evidence }),
       }),
     });
+    if (!revisionResponse.ok) throw new Error("Unable to record the contribution history.");
 
     return Response.json({ performance }, { status: 201 });
   } catch {
