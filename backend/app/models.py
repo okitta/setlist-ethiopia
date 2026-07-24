@@ -50,7 +50,9 @@ class RevisionAction(str, Enum):
 
 
 class User(Base):
-    __tablename__ = "users"
+    # Tables are prefixed `sl_` so they never collide with the deployed app's own
+    # tables in the shared Supabase database (see docs/database/schema-comparison.md).
+    __tablename__ = "sl_users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     handle: Mapped[str] = mapped_column(String(64), unique=True, index=True)
@@ -61,7 +63,7 @@ class User(Base):
 
 
 class Artist(Base):
-    __tablename__ = "artists"
+    __tablename__ = "sl_artists"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), index=True)
@@ -69,14 +71,14 @@ class Artist(Base):
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(default=False, index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("sl_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     performances: Mapped[list["Performance"]] = relationship(back_populates="artist")
 
 
 class Performance(Base):
-    __tablename__ = "performances"
+    __tablename__ = "sl_performances"
     __table_args__ = (
         # Anti-fabrication: the same artist cannot have two live records for the
         # same venue on the same day.
@@ -84,14 +86,14 @@ class Performance(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    artist_id: Mapped[int] = mapped_column(ForeignKey("artists.id"), index=True)
+    artist_id: Mapped[int] = mapped_column(ForeignKey("sl_artists.id"), index=True)
     venue: Mapped[str] = mapped_column(String(200))
     city: Mapped[str] = mapped_column(String(120))
     performed_on: Mapped[date] = mapped_column(Date, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(default=False, index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("sl_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     artist: Mapped[Artist] = relationship(back_populates="performances")
@@ -99,7 +101,7 @@ class Performance(Base):
 
 
 class Song(Base):
-    __tablename__ = "songs"
+    __tablename__ = "sl_songs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(240), index=True)
@@ -108,18 +110,18 @@ class Song(Base):
 
 
 class SetlistEntry(Base):
-    __tablename__ = "setlist_entries"
+    __tablename__ = "sl_setlist_entries"
     __table_args__ = (
         UniqueConstraint("performance_id", "position", name="uq_setlist_perf_position"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    performance_id: Mapped[int] = mapped_column(ForeignKey("performances.id"), index=True)
-    song_id: Mapped[int] = mapped_column(ForeignKey("songs.id"))
+    performance_id: Mapped[int] = mapped_column(ForeignKey("sl_performances.id"), index=True)
+    song_id: Mapped[int] = mapped_column(ForeignKey("sl_songs.id"))
     position: Mapped[int] = mapped_column(Integer)
     is_archived: Mapped[bool] = mapped_column(default=False, index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("sl_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     performance: Mapped[Performance] = relationship(back_populates="setlist")
@@ -127,12 +129,12 @@ class SetlistEntry(Base):
 
 
 class Attendance(Base):
-    __tablename__ = "attendances"
+    __tablename__ = "sl_attendances"
     __table_args__ = (UniqueConstraint("performance_id", "user_id", name="uq_attendance_once"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    performance_id: Mapped[int] = mapped_column(ForeignKey("performances.id"), index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    performance_id: Mapped[int] = mapped_column(ForeignKey("sl_performances.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sl_users.id"), index=True)
     is_archived: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -141,14 +143,14 @@ class Revision(Base):
     """Immutable contribution & revision history. Append-only; never updated or
     deleted. This is what powers 'see the contribution and revision history'."""
 
-    __tablename__ = "revisions"
+    __tablename__ = "sl_revisions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(40), index=True)
     entity_id: Mapped[int] = mapped_column(Integer, index=True)
     action: Mapped[RevisionAction] = mapped_column(String(20))
     summary: Mapped[str] = mapped_column(String(280))
-    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("sl_users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
@@ -157,7 +159,7 @@ class Revision(Base):
 class Report(Base):
     """Community abuse reports (harassment, fabricated records, etc.)."""
 
-    __tablename__ = "reports"
+    __tablename__ = "sl_reports"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(40), index=True)
@@ -165,7 +167,7 @@ class Report(Base):
     reason: Mapped[str] = mapped_column(String(40))
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[ReportStatus] = mapped_column(String(20), default=ReportStatus.open, index=True)
-    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-    resolver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("sl_users.id"))
+    resolver_id: Mapped[int | None] = mapped_column(ForeignKey("sl_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

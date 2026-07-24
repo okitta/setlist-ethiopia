@@ -39,13 +39,20 @@ needed in production.
    already disables server-side prepared statements (`prepare_threshold=None`) and uses
    a tiny pool, which is what pgbouncer transaction mode needs.
 
-## ⚠️ Before it will actually work against Supabase
+## Create this branch's tables in Supabase (one-time)
 
-The Supabase database uses a **different schema** from this branch — see
-[`database/schema-comparison.md`](database/schema-comparison.md). Until the models are
-adapted to the canonical Supabase schema (or a reconciliation is agreed), the API will
-deploy and boot but queries will fail against the mismatched tables. Decide the
-reconciliation first; deployment config is ready either way.
+This branch uses its own **`sl_`-prefixed** tables that coexist with the deployed
+app's tables without touching them (see
+[`database/schema-comparison.md`](database/schema-comparison.md)). Before the API can
+serve data, create them once:
+
+- Supabase Dashboard → **SQL Editor** → paste
+  [`database/supabase_slice1.sql`](database/supabase_slice1.sql) → **Run**, or
+- `psql "$SUPABASE_DB_URL" -f docs/database/supabase_slice1.sql`
+
+The script is idempotent (`IF NOT EXISTS`) and includes a commented teardown block.
+No existing table is altered. Optionally seed demo rows afterwards with
+`SETLIST_DATABASE_URL=... backend/.venv/bin/python -m app.seed`.
 
 ## Local production-like check
 

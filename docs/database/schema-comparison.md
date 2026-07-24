@@ -5,9 +5,9 @@ simpler slice-1 schema authored with SQLAlchemy/Alembic. The deployed branch's
 Supabase database uses a richer schema authored with Drizzle. They overlap in spirit
 (same domain) but differ in table names, columns, and modelling choices.
 
-This document maps the differences so we can decide how to reconcile them. **Do not
-push this branch's tables into Supabase as-is** — several would collide with existing
-tables that share a name but have different columns (see "Conflicts" below).
+This document maps the differences and records the reconciliation we chose:
+**net-new, `sl_`-prefixed tables** that coexist with the existing Supabase tables
+without touching them (see "Chosen approach" below).
 
 ## Table-by-table
 
@@ -43,30 +43,44 @@ tables that share a name but have different columns (see "Conflicts" below).
    branch stores a human `action` + `summary`. Both are append-only history.
 6. **Identity.** Supabase users are keyed by `email`; this branch by `handle`.
 
-## Conflicts if we blindly "add this branch's schema" to Supabase
+## Why we could not simply reuse the existing table names
 
 `artists`, `performances`, `reports`, `revisions`, `users` already exist in Supabase
 with **different columns**. Creating them again would fail (name clash) or, if forced,
 break the deployed app. `attendance` vs `attendances` and `setlist_items` vs
-`setlist_entries` would create confusing near-duplicates. So a straight "apply our
-schema on top" is not safe.
+`setlist_entries` would create confusing near-duplicates.
 
-## Recommended reconciliation
+## Chosen approach — net-new, prefixed tables (no conflicts)
 
-**Treat the Supabase schema as canonical and adapt this branch to it** (Option A in the
-PR discussion). Concretely:
+We keep the existing Supabase tables untouched and give this branch its **own
+`sl_`-prefixed tables** in the same database, so both applications coexist:
 
-- Point SQLAlchemy models at the existing tables/columns (`display_name`, `email`,
-  `event`/`venue`, `setlist_items.title`, `reports.category/detail`,
-  `revisions.before_json/after_json`, `attendance.visibility`).
-- Manage schema with the **existing Drizzle migrations** as the source of truth; this
-  branch's Alembic migration becomes local-only (SQLite dev) or is retired.
-- Add the missing product concepts here (events, venues, artist_names) rather than
-  forking the schema.
+| This branch's model | Supabase table |
+| --- | --- |
+| `User` | `sl_users` |
+| `Artist` | `sl_artists` |
+| `Performance` | `sl_performances` |
+| `Song` | `sl_songs` |
+| `SetlistEntry` | `sl_setlist_entries` |
+| `Attendance` | `sl_attendances` |
+| `Revision` | `sl_revisions` |
+| `Report` | `sl_reports` |
 
-The alternative — adding net-new, non-conflicting tables to Supabase — is only
-appropriate for genuinely new concepts this branch introduces that Supabase lacks, and
-should be additive migrations reviewed against the deployed app.
+- SQLAlchemy owns and creates these tables (`backend/app/models.py`,
+  `backend/alembic/versions/…`). The prefix is portable across our local SQLite and
+  Supabase Postgres — no Postgres-schema/`search_path` juggling needed.
+- **No existing Supabase table is renamed, dropped, or altered.** There is zero overlap.
+- Apply them to Supabase by running [`supabase_slice1.sql`](supabase_slice1.sql) (you
+  run it; see [`../DEPLOY.md`](../DEPLOY.md)).
+
+### Trade-off (recorded for later)
+
+This means two parallel models of the same domain live in one database (e.g. the
+deployed app's `artists` and our `sl_artists`). That is fine for shipping this branch
+independently, but if the two apps should eventually share data, a future step is to
+converge — either by having this branch read the canonical tables or by an ETL/view
+layer. The richer concepts the deployed schema already has (events, venues,
+multilingual `artist_names`) are the natural direction for that convergence.
 
 ## `attendance.visibility` — privacy note
 
