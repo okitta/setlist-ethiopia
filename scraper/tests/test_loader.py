@@ -15,9 +15,12 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from ethioscrape import fixtures
-from ethioscrape.db import load
+from ethioscrape.db import _normalise_url, load
 
 URL = os.environ.get("SCRAPER_TEST_DATABASE_URL")
+# Normalise so the test's own verification engine uses the psycopg (v3) driver too,
+# whether the URL is given as postgresql:// or postgresql+psycopg://.
+ENGINE_URL = _normalise_url(URL) if URL else None
 pytestmark = pytest.mark.skipif(not URL, reason="SCRAPER_TEST_DATABASE_URL not set")
 
 
@@ -34,7 +37,7 @@ def test_load_is_idempotent_and_wires_foreign_keys():
     assert stats1["performances"] == 3
     assert stats1["setlist_items"] == 5
 
-    engine = create_engine(URL, future=True)
+    engine = create_engine(ENGINE_URL, future=True)
     assert _count(engine, "artists") == 3
     assert _count(engine, "performances") == 3
 
