@@ -16,6 +16,14 @@ DEFAULT_UA = (
 )
 
 
+class FetchError(RuntimeError):
+    """A request failed. Carries the HTTP status when there was a response."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
 class PoliteClient:
     def __init__(
         self,
@@ -78,15 +86,19 @@ class PoliteClient:
                 resp = self.session.get(
                     url, headers=headers, params=params, timeout=self.timeout
                 )
-                if resp.status_code in (429, 500, 502, 503, 504):
-                    time.sleep(2**attempt)
-                    continue
-                resp.raise_for_status()
-                return resp
             except requests.RequestException as exc:  # network hiccup -> retry
                 last_exc = exc
                 time.sleep(2**attempt)
-        raise RuntimeError(f"failed to fetch {url}: {last_exc}")
+                continue
+            # Transient server errors / throttling -> back off and retry.
+            if resp.status_code in (429, 500, 502, 503, 504):
+                time.sleep(2**attempt)
+                continue
+            # Other client errors (401 bad key, 404 no data) are not retryable.
+            if resp.status_code >= 400:
+                raise FetchError(f"HTTP {resp.status_code} for {url}", status=resp.status_code)
+            return resp
+        raise FetchError(f"failed to fetch {url}: {last_exc}", status=None)
 
     def get_json(self, url: str, *, headers: dict | None = None, params: dict | None = None):
         resp = self._request(url, headers=headers, params=params)

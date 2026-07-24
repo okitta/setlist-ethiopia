@@ -7,11 +7,32 @@ each setlist yields a venue, an event, a performance, and its ordered songs.
 
 from __future__ import annotations
 
-from ..http import PoliteClient
+from ..budget import DailyBudget
+from ..http import FetchError, PoliteClient
 from ..models import Dataset, Event, Performance, SetlistItem, Venue
 from ..util import parse_setlistfm_date, slugify
 
 SFM_BASE = "https://api.setlist.fm/rest/1.0"
+
+
+def check_api_key(client: PoliteClient, api_key: str) -> dict:
+    """Ping the API to confirm the key works. Returns {ok, total, sample|error}."""
+    headers = {"Accept": "application/json", "x-api-key": api_key}
+    try:
+        data = client.get_json(
+            f"{SFM_BASE}/search/artists",
+            headers=headers,
+            params={"artistName": "Mulatu Astatke", "sort": "relevance", "p": 1},
+        )
+    except FetchError as exc:
+        reason = "invalid or unauthorised API key" if exc.status == 401 else str(exc)
+        return {"ok": False, "status": exc.status, "error": reason}
+    artists = data.get("artist", [])
+    return {
+        "ok": True,
+        "total": data.get("total", 0),
+        "sample": [a.get("name") for a in artists[:3]],
+    }
 
 
 def parse_setlist(doc: dict) -> tuple[Venue | None, Event | None, Performance | None]:
@@ -85,19 +106,36 @@ def collect(
     *,
     artist_mbids: list[str],
     max_pages: int = 2,
+    budget: DailyBudget | None = None,
 ) -> Dataset:
+    """Fetch setlists for the given artists.
+
+    If a `budget` is supplied, stop before exceeding the daily request cap (so a run
+    never gets the key rate-limited); already-collected data is still returned.
+    """
     ds = Dataset()
     headers = {"Accept": "application/json", "x-api-key": api_key}
     for mbid in artist_mbids:
         for page in range(1, max_pages + 1):
+            if budget is not None and not budget.can_spend():
+                print(
+                    f"  ! setlist.fm daily budget reached "
+                    f"({budget.used}/{budget.limit}); stopping early."
+                )
+                return ds
             try:
                 data = client.get_json(
                     f"{SFM_BASE}/artist/{mbid}/setlists",
                     headers=headers,
                     params={"p": page},
                 )
-            except RuntimeError:
-                break  # 404 = artist has no setlists; move on
+            except FetchError:
+                # 404 = artist has no setlists; still counts as a spent request.
+                if budget is not None:
+                    budget.spend(1)
+                break
+            if budget is not None:
+                budget.spend(1)
             setlists = data.get("setlist", [])
             if not setlists:
                 break

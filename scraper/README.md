@@ -42,6 +42,26 @@ python -m ethioscrape.main --sources jsonld --urls-file urls.txt
 
 # Load directly into Postgres/Supabase (canonical tables must already exist).
 python -m ethioscrape.main --sample --database-url "$SUPABASE_DB_URL"
+
+# Verify your setlist.fm key works before a real run.
+SETLISTFM_API_KEY=xxx python -m ethioscrape.main --check-setlistfm
+```
+
+### setlist.fm rate limits
+
+setlist.fm caps usage at **2 req/sec** and **1440 req/day**. The scraper stays inside
+both automatically:
+
+- 1 request/host/second by default (`--min-interval`), under the 2/sec ceiling.
+- A **persistent daily budget**: it records how many setlist.fm requests it has made
+  today (UTC) in `--budget-file` (default `out/setlistfm_usage.json`) and stops before
+  exceeding `--setlistfm-daily-budget` (default `1440`) — even across multiple runs in
+  the same day. Already-collected data is still written.
+
+```bash
+# Conservative run that will never exceed 500 setlist.fm calls today:
+python -m ethioscrape.main --sources musicbrainz,setlistfm \
+    --limit 200 --setlistfm-daily-budget 500
 ```
 
 The default output is a JSON dump so you can **review before loading**. Add
