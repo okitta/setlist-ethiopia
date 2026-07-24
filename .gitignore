@@ -1,5 +1,7 @@
 # Python
 backend/.venv/
+scraper/.venv/
+scraper/out/
 __pycache__/
 *.pyc
 backend/setlist.db
