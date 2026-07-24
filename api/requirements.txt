@@ -1,0 +1,11 @@
+# Runtime dependencies for the Vercel Python function.
+# Reuses the backend's pinned versions and adds the Postgres driver (psycopg v3),
+# which is required for Supabase. Dev-only tools (uvicorn, pytest, alembic) are not
+# needed at request time and are intentionally omitted.
+fastapi==0.115.6
+starlette==0.41.3
+pydantic==2.10.4
+pydantic-settings==2.7.0
+SQLAlchemy==2.0.36
+psycopg[binary]==3.2.3
+python-dotenv==1.2.2
