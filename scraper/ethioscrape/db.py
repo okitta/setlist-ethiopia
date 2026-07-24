@@ -73,8 +73,17 @@ class LoadStats(dict):
     """Counts of rows inserted/updated per table."""
 
 
+def _normalise_url(url: str) -> str:
+    """Pin the psycopg (v3) driver so a plain Supabase `postgresql://` URL works
+    without psycopg2 installed."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 def load(dataset: Dataset, database_url: str) -> LoadStats:
-    engine = create_engine(database_url, future=True)
+    engine = create_engine(_normalise_url(database_url), future=True)
     stats = LoadStats(
         artists=0, artist_names=0, venues=0, events=0, performances=0, setlist_items=0
     )

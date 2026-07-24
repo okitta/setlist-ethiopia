@@ -96,6 +96,32 @@ you to **1 request/second per IP** (503 otherwise). The scraper already:
 Per their guidance, avoid fixed-time scheduled runs (spread work out / randomise), and
 don't poll for changes.
 
+## Scheduled runs (GitHub Actions)
+
+Two workflows in `.github/workflows/` run this on a schedule:
+
+| Workflow | Schedule | What it does |
+| --- | --- | --- |
+| `scrape.yml` | Weekly (Mon 04:27 UTC) + manual | Full `musicbrainz,setlistfm` crawl → Supabase. Manual runs accept `limit` / `daily_budget` inputs for backfills. Uploads the JSON as an artifact. |
+| `scrape-healthcheck.yml` | Daily (07:00 UTC) + manual | `--check-setlistfm` — fails (emails you) if the key/API breaks. |
+
+**Weekly, not daily:** MusicBrainz asks apps not to poll frequently, and concert data
+changes slowly; idempotent upserts keep re-runs clean. The crawl adds a small random
+start delay to avoid on-the-hour bursts.
+
+### Required repository secrets
+
+Settings → Secrets and variables → Actions:
+
+| Secret | Value |
+| --- | --- |
+| `SUPABASE_DB_URL` | Postgres connection string — use the **session/direct** URL (port 5432), not the pooler |
+| `SETLISTFM_API_KEY` | your setlist.fm key |
+| `ETHIOSCRAPE_CONTACT` | contact email for the MusicBrainz User-Agent |
+
+To backfill on demand: Actions → *Scrape Ethiopian performances* → **Run workflow**,
+and bump `limit` (e.g. `1000`).
+
 ## Tests
 
 ```bash
