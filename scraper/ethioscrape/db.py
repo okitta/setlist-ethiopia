@@ -75,11 +75,22 @@ class LoadStats(dict):
 
 def _normalise_url(url: str) -> str:
     """Pin the psycopg (v3) driver so a plain Supabase `postgresql://` URL works
-    without psycopg2 installed."""
+    without psycopg2 installed. Rejects non-Postgres URLs with a clear message —
+    the usual mistake is pasting the Supabase project URL (https://<ref>.supabase.co)
+    instead of the database connection string."""
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix) :]
-    return url
+    if url.startswith("postgresql"):  # already has an explicit driver, e.g. +psycopg
+        return url
+    scheme = url.split("://", 1)[0] if "://" in url else url
+    raise ValueError(
+        f"database URL must be a Postgres connection string (postgresql://...), "
+        f"but got scheme '{scheme}'. This looks like the Supabase project/API URL, "
+        f"not the database URL. In Supabase open Connect → Session pooler and copy "
+        f"the URI (host aws-0-<region>.pooler.supabase.com, port 5432, db 'postgres'), "
+        f"replacing [YOUR-PASSWORD]."
+    )
 
 
 def load(dataset: Dataset, database_url: str) -> LoadStats:
