@@ -1,0 +1,18 @@
+# Python
+backend/.venv/
+scraper/.venv/
+scraper/out/
+__pycache__/
+*.pyc
+backend/setlist.db
+.env
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

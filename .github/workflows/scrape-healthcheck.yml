@@ -1,0 +1,29 @@
+name: Scraper health check
+
+# Cheap daily check that the setlist.fm API key still works, so a broken key or a
+# service change is caught early (GitHub emails you on a failed scheduled run)
+# instead of silently rotting the weekly crawl. One API request; negligible load.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: scraper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Check setlist.fm key
+        env:
+          SETLISTFM_API_KEY: ${{ secrets.SETLISTFM_API_KEY }}
+          ETHIOSCRAPE_CONTACT: ${{ secrets.ETHIOSCRAPE_CONTACT }}
+        run: python -m ethioscrape.main --check-setlistfm

@@ -1,0 +1,68 @@
+name: Scrape Ethiopian performances
+
+# Weekly crawl of MusicBrainz (artists + native names) and setlist.fm (setlists),
+# loaded into Supabase as status='community' rows for curators to verify.
+#
+# Why weekly (not daily): MusicBrainz asks applications NOT to poll frequently, and
+# live-performance data changes slowly. Re-runs are safe (idempotent upserts).
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL     Postgres connection string (session/direct, port 5432)
+#   SETLISTFM_API_KEY   setlist.fm API key
+#   ETHIOSCRAPE_CONTACT contact email for the MusicBrainz User-Agent
+
+on:
+  schedule:
+    - cron: "27 4 * * 1" # Mondays 04:27 UTC (odd minute = avoid on-the-hour peaks)
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max artists to discover"
+        default: "300"
+      daily_budget:
+        description: "Max setlist.fm requests this run"
+        default: "1440"
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330 # crawls are slow (1 req/sec); GitHub allows up to 6h
+    defaults:
+      run:
+        working-directory: scraper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      # Jitter: MusicBrainz discourages fixed-time bursts. Spread the start time.
+      - name: Random start delay
+        run: sleep $((RANDOM % 300))
+
+      - name: Crawl and load into Supabase
+        env:
+          SETLISTFM_API_KEY: ${{ secrets.SETLISTFM_API_KEY }}
+          ETHIOSCRAPE_CONTACT: ${{ secrets.ETHIOSCRAPE_CONTACT }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          python -m ethioscrape.main \
+            --sources musicbrainz,setlistfm \
+            --limit "${{ github.event.inputs.limit || '300' }}" \
+            --setlistfm-daily-budget "${{ github.event.inputs.daily_budget || '1440' }}" \
+            --out out/dataset.json \
+            --database-url "$SUPABASE_DB_URL"
+
+      # Keep the normalised JSON for review/debugging (no secrets in it).
+      - name: Upload dataset artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset-${{ github.run_id }}
+          path: scraper/out/dataset.json
+          retention-days: 14
