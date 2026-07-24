@@ -90,7 +90,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=50, help="Max artists to discover")
     p.add_argument("--max-pages", type=int, default=2, help="setlist.fm pages per artist")
     p.add_argument("--urls-file", help="File of URLs (one per line) for the jsonld source")
-    p.add_argument("--contact", help="Contact email added to the User-Agent (courtesy)")
+    p.add_argument("--contact",
+                   help="Contact email added to the User-Agent (or set ETHIOSCRAPE_CONTACT)")
     p.add_argument("--min-interval", type=float, default=1.0, help="Seconds between requests/host")
     p.add_argument("--ignore-robots", action="store_true", help="(Not recommended) skip robots.txt")
     p.add_argument("--out", default="out/dataset.json", help="Where to write the JSON dump")
@@ -126,6 +127,10 @@ def _check_setlistfm(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    # Contact for the User-Agent: prefer the flag, fall back to an env var so the
+    # email is never hard-coded into the (public) repo.
+    args.contact = args.contact or os.environ.get("ETHIOSCRAPE_CONTACT")
 
     if args.check_setlistfm:
         return _check_setlistfm(args)

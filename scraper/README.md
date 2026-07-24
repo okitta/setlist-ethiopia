@@ -82,6 +82,20 @@ slug; performances are de-duplicated).
 - Rate-limits to 1 request/host/second by default (`--min-interval`).
 - Prefer the API sources (MusicBrainz, setlist.fm) over raw HTML where possible.
 
+### MusicBrainz etiquette
+
+MusicBrainz needs **no API key** — but it requires a meaningful User-Agent and limits
+you to **1 request/second per IP** (503 otherwise). The scraper already:
+
+- sends `SetlistEthiopiaScraper/0.1 ( <project-url>; <contact> )` — not an
+  "anonymous" agent — so set your contact for real runs, either with
+  `--contact you@example.com` or once via `export ETHIOSCRAPE_CONTACT=you@example.com`
+  (keep your personal email out of committed source);
+- throttles to 1 req/sec and backs off/retries on `503`.
+
+Per their guidance, avoid fixed-time scheduled runs (spread work out / randomise), and
+don't poll for changes.
+
 ## Tests
 
 ```bash

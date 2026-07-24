@@ -10,10 +10,20 @@ from urllib.robotparser import RobotFileParser
 
 import requests
 
-DEFAULT_UA = (
-    "SetlistEthiopiaScraper/0.1 "
-    "(+https://github.com/okitta/setlist-ethiopia; community music archive)"
-)
+APP_NAME = "SetlistEthiopiaScraper"
+APP_VERSION = "0.1"
+PROJECT_URL = "https://github.com/okitta/setlist-ethiopia"
+
+
+def build_user_agent(contact: str | None = None) -> str:
+    """A meaningful User-Agent in MusicBrainz's recommended form:
+    ``Application/version ( contact-url-or-email )``. Passing a --contact email makes
+    the maintainer reachable if a source ever needs to get in touch (their request)."""
+    inside = f"{PROJECT_URL}; {contact}" if contact else PROJECT_URL
+    return f"{APP_NAME}/{APP_VERSION} ( {inside} )"
+
+
+DEFAULT_UA = build_user_agent()
 
 
 class FetchError(RuntimeError):
@@ -28,16 +38,14 @@ class PoliteClient:
     def __init__(
         self,
         *,
-        user_agent: str = DEFAULT_UA,
+        user_agent: str | None = None,
         contact: str | None = None,
         min_interval: float = 1.0,
         timeout: float = 20.0,
         obey_robots: bool = True,
         max_retries: int = 3,
     ) -> None:
-        ua = user_agent
-        if contact:
-            ua = f"{user_agent} contact:{contact}"
+        ua = user_agent or build_user_agent(contact)
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": ua})
         self.min_interval = min_interval
