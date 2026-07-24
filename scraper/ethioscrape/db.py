@@ -22,6 +22,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import OperationalError
 
 from .models import Dataset
 
@@ -95,6 +96,22 @@ def _normalise_url(url: str) -> str:
 
 def load(dataset: Dataset, database_url: str) -> LoadStats:
     engine = create_engine(_normalise_url(database_url), future=True)
+
+    # Preflight: turn an unreachable-server failure into an actionable message. The
+    # usual cause from CI is Supabase's IPv6-only Direct connection on an IPv4-only
+    # runner — the Session pooler (IPv4) is what to use there.
+    try:
+        with engine.connect():
+            pass
+    except OperationalError as exc:
+        raise RuntimeError(
+            "Could not connect to Postgres. From GitHub Actions (or any IPv4-only "
+            "host), use Supabase's Session pooler URI — host "
+            "aws-0-<region>.pooler.supabase.com, port 5432. The Direct connection "
+            "(db.<ref>.supabase.co) is IPv6-only and unreachable from IPv4 runners.\n"
+            f"Original error: {exc.orig}"
+        ) from exc
+
     stats = LoadStats(
         artists=0, artist_names=0, venues=0, events=0, performances=0, setlist_items=0
     )
