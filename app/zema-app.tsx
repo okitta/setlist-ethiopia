@@ -448,7 +448,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
         <span className="brand-mark">ዜ</span><p className="kicker"><span /> JOIN THE COMMUNITY</p>
         <h2 id="auth-title">Keep Ethiopia&apos;s music alive</h2>
         <p>Sign in to contribute, sync saved events, and build a private history of performances you attended.</p>
-        <a className="primary-action auth-link" href="/signin-with-chatgpt?return_to=/">Continue securely <span>→</span></a>
+        <a className="primary-action auth-link" href="/auth">Continue securely <span>→</span></a>
         <small>Public browsing never requires an account. Attendance is private by default.</small>
       </section>
     </div>

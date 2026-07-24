@@ -1,13 +1,19 @@
-import { env } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
+function required(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is not configured.`);
+  return value;
+}
 
-export function getDb() {
-  if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
-    );
-  }
+export function getSupabaseAdminHeaders() {
+  const serviceRoleKey = required("SUPABASE_SERVICE_ROLE_KEY");
+  return {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=representation",
+  };
+}
 
-  return drizzle(env.DB, { schema });
+export function getSupabaseRestUrl(path: string) {
+  return `${required("NEXT_PUBLIC_SUPABASE_URL")}/rest/v1/${path}`;
 }
