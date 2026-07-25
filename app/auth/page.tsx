@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,6 +12,38 @@ export default function AuthPage() {
   const [stage, setStage] = useState<"email" | "verify" | "done">("email");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const hashParameters = new URLSearchParams(window.location.hash.slice(1));
+    const queryParameters = new URLSearchParams(window.location.search);
+    const parameters = hashParameters.size ? hashParameters : queryParameters;
+    const accessToken = parameters.get("access_token");
+    const refreshToken = parameters.get("refresh_token");
+    const authError = parameters.get("error_description");
+
+    const update = window.setTimeout(() => {
+      if (accessToken) {
+        window.localStorage.setItem("zema-access-token", accessToken);
+        window.localStorage.setItem("zema-refresh-token", refreshToken ?? "");
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setStage("done");
+        setMessage("You are signed in. Your contributions can now be attributed.");
+      } else if (authError) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setMessage(authError);
+      }
+    }, 0);
+    return () => window.clearTimeout(update);
+  }, []);
+
+  function signInWithProvider(provider: "google" | "github") {
+    if (!supabaseUrl) {
+      setMessage("Social sign-in is not configured yet.");
+      return;
+    }
+    const redirectTo = `${window.location.origin}/auth`;
+    window.location.assign(`${supabaseUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectTo)}`);
+  }
 
   async function sendCode(event: FormEvent) {
     event.preventDefault();
@@ -28,7 +60,7 @@ export default function AuthPage() {
     setLoading(false);
     if (response.ok) {
       setStage("verify");
-      setMessage("We sent a verification code to your email.");
+      setMessage("We sent a one-time confirmation code to your email.");
     } else {
       const body = await response.json().catch(() => ({}));
       setMessage(body.msg ?? "Unable to send the code. Please try again.");
@@ -63,8 +95,13 @@ export default function AuthPage() {
         <p className="kicker"><span /> JOIN THE COMMUNITY</p>
         <h1>{stage === "done" ? "Welcome to the archive" : "Keep Ethiopia’s music alive"}</h1>
         <p>Sign in to contribute, sync saved events, and build your private concert history.</p>
+        {stage !== "done" && <div className="social-auth">
+          <button type="button" onClick={() => signInWithProvider("google")}><span aria-hidden="true">G</span> Continue with Google</button>
+          <button type="button" onClick={() => signInWithProvider("github")}><span aria-hidden="true">⌘</span> Continue with GitHub</button>
+          <div><span>or use email</span></div>
+        </div>}
         {stage === "email" && <form onSubmit={sendCode}><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><button className="primary-action" disabled={loading}>{loading ? "Sending…" : "Send a secure code"} <span>→</span></button></form>}
-        {stage === "verify" && <form onSubmit={verifyCode}><label>Verification code<input inputMode="numeric" autoComplete="one-time-code" value={token} onChange={(event) => setToken(event.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="123456" required /></label><button className="primary-action" disabled={loading}>{loading ? "Checking…" : "Verify and sign in"} <span>→</span></button><button type="button" className="auth-back" onClick={() => setStage("email")}>Use another email</button></form>}
+        {stage === "verify" && <form onSubmit={verifyCode}><label>Confirmation code<input inputMode="numeric" autoComplete="one-time-code" value={token} onChange={(event) => setToken(event.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="123456" required /></label><button className="primary-action" disabled={loading}>{loading ? "Checking…" : "Confirm and sign in"} <span>→</span></button><button type="button" className="auth-back" onClick={() => setStage("email")}>Use another email</button></form>}
         {stage === "done" && <Link className="primary-action auth-link" href="/">Return to Zema Archive <span>→</span></Link>}
         {message && <p className="auth-message" role="status">{message}</p>}
         <small>Public browsing never requires an account. Attendance is private by default.</small>

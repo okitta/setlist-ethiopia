@@ -65,9 +65,9 @@ type EventView = {
 };
 const PAGE_SIZE = {
   recent: 5,
-  events: 6,
-  artists: 10,
-  venues: 8,
+  events: 9,
+  artists: 15,
+  venues: 10,
 };
 
 async function fetchArchive() {

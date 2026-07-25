@@ -43,10 +43,33 @@ Apply the generated SQL from `drizzle/` using the Supabase SQL Editor before acc
 1. Import `okitta/setlist-ethiopia` in Vercel.
 2. Set the production branch to `vercel`.
 3. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `DATABASE_URL`.
-4. In Supabase’s email authentication template, include the one-time token so users receive a verification code.
+4. Configure the Supabase authentication settings described below.
 5. Deploy.
 
 Vercel will detect Next.js automatically; no custom build command is required.
+
+### Supabase email confirmation codes
+
+The application asks Supabase to send an email OTP and verifies the code in the `/auth` UI. Supabase controls whether that email contains a code or a magic link.
+
+1. Open **Supabase → Authentication → Email Templates**.
+2. Edit both **Confirm signup** and **Magic Link**.
+3. Replace links using `{{ .ConfirmationURL }}` with a visible code using `{{ .Token }}`. For example: `<p>Your Zema Archive confirmation code is: <strong>{{ .Token }}</strong></p>`.
+4. Open **Authentication → URL Configuration**.
+5. Set **Site URL** to the production Vercel domain, not localhost.
+6. Add `https://YOUR-DOMAIN/auth` to **Redirect URLs**. Add preview URLs separately only when preview authentication is required.
+
+### Google and GitHub sign-in
+
+The `/auth` page supports Google and GitHub OAuth through Supabase.
+
+1. Open **Supabase → Authentication → Providers** and enable Google or GitHub.
+2. Create the corresponding OAuth application with the provider.
+3. Use the Supabase callback URL shown on that provider’s settings page as the provider application’s authorized callback URL.
+4. Add the provider client ID and secret in Supabase.
+5. Keep `https://YOUR-DOMAIN/auth` in Supabase’s redirect allow list.
+
+OAuth secrets belong in Supabase and must never use a `NEXT_PUBLIC_` environment variable.
 
 ## Validation
 

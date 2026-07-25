@@ -5,9 +5,10 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("ships the Vercel-compatible Zema Archive experience", async () => {
-  const [page, app, archiveApi, contributionApi, layout, css, packageJson, schema, envExample] = await Promise.all([
+  const [page, app, auth, archiveApi, contributionApi, layout, css, packageJson, schema, envExample] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/zema-app.tsx", root), "utf8"),
+    readFile(new URL("app/auth/page.tsx", root), "utf8"),
     readFile(new URL("app/api/archive/route.ts", root), "utf8"),
     readFile(new URL("app/api/contributions/route.ts", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
@@ -27,6 +28,13 @@ test("ships the Vercel-compatible Zema Archive experience", async () => {
   assert.match(app, /zema-access-token/);
   assert.match(app, /function Pagination/);
   assert.match(app, /aria-current=/);
+  assert.match(app, /events: 9/);
+  assert.match(app, /artists: 15/);
+  assert.match(app, /venues: 10/);
+  assert.match(auth, /Continue with Google/);
+  assert.match(auth, /Continue with GitHub/);
+  assert.match(auth, /auth\/v1\/authorize/);
+  assert.match(auth, /one-time confirmation code/);
   assert.match(archiveApi, /events\?select=/);
   assert.match(archiveApi, /performances\?select=/);
   assert.match(archiveApi, /stats:/);
