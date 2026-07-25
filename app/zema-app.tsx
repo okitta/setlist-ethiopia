@@ -5,6 +5,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 type View = "home" | "explore" | "saved" | "profile";
 type ExploreFilter = "All" | "Events" | "Artists" | "Venues";
 type ContributionInput = { artist: string; date: string; venue: string; songs: string; source: string };
+type AuthUser = {
+  id: string;
+  email?: string;
+  user_metadata?: { full_name?: string; name?: string; avatar_url?: string };
+};
 type DbPerformance = {
   id: number;
   submitted_artist: string | null;
@@ -69,11 +74,45 @@ const PAGE_SIZE = {
   artists: 15,
   venues: 10,
 };
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 async function fetchArchive() {
   const response = await fetch("/api/archive", { cache: "no-store" });
   if (!response.ok) throw new Error("The community feed is unavailable.");
   return response.json() as Promise<ArchiveData>;
+}
+
+async function requestAuthUser() {
+  if (!supabaseUrl || !supabaseKey) return null;
+  let accessToken = window.localStorage.getItem("zema-access-token");
+  if (!accessToken) return null;
+
+  let response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const refreshToken = window.localStorage.getItem("zema-refresh-token");
+    if (!refreshToken) return null;
+    const refreshResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { apikey: supabaseKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!refreshResponse.ok) return null;
+    const session = await refreshResponse.json() as { access_token: string; refresh_token?: string };
+    accessToken = session.access_token;
+    window.localStorage.setItem("zema-access-token", session.access_token);
+    window.localStorage.setItem("zema-refresh-token", session.refresh_token ?? refreshToken);
+    response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+  }
+
+  return response.ok ? response.json() as Promise<AuthUser> : null;
 }
 
 const collections = [
@@ -98,6 +137,8 @@ export function ZemaApp() {
   const [notice, setNotice] = useState("");
   const [archive, setArchive] = useState<ArchiveData | null>(null);
   const [archiveError, setArchiveError] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [recentPage, setRecentPage] = useState(1);
   const [eventPage, setEventPage] = useState(1);
   const [artistPage, setArtistPage] = useState(1);
@@ -111,6 +152,28 @@ export function ZemaApp() {
       })
       .catch(() => {
         if (active) setArchiveError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void requestAuthUser()
+      .then((user) => {
+        if (!user) {
+          window.localStorage.removeItem("zema-access-token");
+          window.localStorage.removeItem("zema-refresh-token");
+        }
+        if (active) setAuthUser(user);
+      })
+      .catch(() => {
+        window.localStorage.removeItem("zema-access-token");
+        window.localStorage.removeItem("zema-refresh-token");
+      })
+      .finally(() => {
+        if (active) setAuthReady(true);
       });
     return () => {
       active = false;
@@ -134,6 +197,7 @@ export function ZemaApp() {
       if (response.status === 401) {
         window.localStorage.removeItem("zema-access-token");
         window.localStorage.removeItem("zema-refresh-token");
+        setAuthUser(null);
       }
       throw new Error(body.error ?? "The contribution could not be saved.");
     }
@@ -162,6 +226,21 @@ export function ZemaApp() {
     setNotice(attended.includes(id) ? "Removed from your concert history" : "Added privately to your concert history");
   }
 
+  async function signOut() {
+    const accessToken = window.localStorage.getItem("zema-access-token");
+    if (supabaseUrl && supabaseKey && accessToken) {
+      await fetch(`${supabaseUrl}/auth/v1/logout`, {
+        method: "POST",
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` },
+      }).catch(() => undefined);
+    }
+    window.localStorage.removeItem("zema-access-token");
+    window.localStorage.removeItem("zema-refresh-token");
+    setAuthUser(null);
+    setView("home");
+    setNotice("You have been signed out");
+  }
+
   const events = useMemo(() => (archive?.events ?? []).map(toEventView), [archive]);
   const upcomingEvents = useMemo(() => events.filter((event) => event.kind === "Upcoming"), [events]);
   const artists = useMemo(() => (archive?.artists ?? []).map(toArtistView), [archive]);
@@ -184,6 +263,8 @@ export function ZemaApp() {
   }, [artists, events, query]);
 
   const displayedSaved = events.filter((event) => saved.includes(event.id));
+  const accountName = authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || authUser?.email?.split("@")[0] || "Community member";
+  const accountInitial = accountName.trim().charAt(0).toUpperCase() || "Z";
 
   return (
     <div className="app-shell">
@@ -204,7 +285,15 @@ export function ZemaApp() {
           <button className="language-toggle" onClick={() => setLanguage(language === "EN" ? "አማ" : "EN")} aria-label="Change language">
             {language} <span>⌄</span>
           </button>
-          <button className="sign-in" onClick={() => setShowAuth(true)}>Sign in</button>
+          {authReady && authUser ? (
+            <div className="account-actions">
+              <button className="account-chip" onClick={() => setView("profile")} aria-label={`Open ${accountName}'s profile`}>
+                <span className="account-avatar">{accountInitial}</span>
+                <span><small>Signed in as</small><strong>{accountName}</strong></span>
+              </button>
+              <button className="sign-out" onClick={() => void signOut()}>Sign out</button>
+            </div>
+          ) : <button className="sign-in" onClick={() => setShowAuth(true)}>{authReady ? "Sign in" : "Checking…"}</button>}
           <button className="add-button" onClick={() => setShowAdd(true)}><Icon>＋</Icon> Add performance</button>
         </div>
       </header>
@@ -370,6 +459,19 @@ export function ZemaApp() {
             <p className="kicker"><span /> YOUR PROFILE</p>
             <h1>Your concert history</h1>
             <p className="page-intro">Attendance is private by default. You decide what becomes visible.</p>
+            {authUser ? (
+              <div className="signed-profile">
+                <span className="account-avatar large">{accountInitial}</span>
+                <div><small>Signed in as</small><strong>{accountName}</strong><span>{authUser.email}</span></div>
+                <button onClick={() => void signOut()}>Sign out</button>
+              </div>
+            ) : (
+              <div className="signed-profile guest">
+                <span className="account-avatar large">○</span>
+                <div><strong>You are browsing as a guest</strong><span>Sign in to attribute contributions and keep your account available across devices.</span></div>
+                <button onClick={() => setShowAuth(true)}>Sign in</button>
+              </div>
+            )}
             {attended.length ? (
               <div className="profile-panel">
                 <div className="privacy-note"><Icon>◉</Icon><div><strong>Private attendance</strong><span>Only you can see these {attended.length} performances.</span></div><button>Privacy settings</button></div>

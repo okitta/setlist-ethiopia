@@ -31,6 +31,10 @@ test("ships the Vercel-compatible Zema Archive experience", async () => {
   assert.match(app, /events: 9/);
   assert.match(app, /artists: 15/);
   assert.match(app, /venues: 10/);
+  assert.match(app, /requestAuthUser/);
+  assert.match(app, /Signed in as/);
+  assert.match(app, /auth\/v1\/logout/);
+  assert.match(app, /grant_type=refresh_token/);
   assert.match(auth, /Continue with Google/);
   assert.match(auth, /Continue with GitHub/);
   assert.match(auth, /auth\/v1\/authorize/);
