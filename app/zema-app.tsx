@@ -5,96 +5,75 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 type View = "home" | "explore" | "saved" | "profile";
 type ExploreFilter = "All" | "Events" | "Artists" | "Venues";
 type ContributionInput = { artist: string; date: string; venue: string; songs: string; source: string };
-type CommunityPerformance = {
+type DbPerformance = {
   id: number;
   submitted_artist: string | null;
   submitted_venue: string | null;
   performance_date: string;
   status: string;
   created_at: string;
+  artists: { display_name: string; native_name: string | null; genre: string | null } | null;
+  events: { title: string; venues: DbVenue | null } | null;
   setlist_items?: Array<{ id: number }>;
 };
+type DbEvent = {
+  id: number;
+  slug: string;
+  title: string;
+  event_date: string;
+  status: string;
+  venues: DbVenue | null;
+};
+type DbArtist = {
+  id: number;
+  slug: string;
+  display_name: string;
+  native_name: string | null;
+  genre: string | null;
+  status: string;
+  performances?: Array<{ id: number }>;
+};
+type DbVenue = {
+  id?: number;
+  slug?: string;
+  display_name: string;
+  native_name?: string | null;
+  city: string;
+  country: string;
+  address?: string | null;
+  events?: Array<{ id: number }>;
+};
+type ArchiveData = {
+  events: DbEvent[];
+  performances: DbPerformance[];
+  artists: DbArtist[];
+  venues: DbVenue[];
+  stats: { performances: number; artists: number; venues: number; countries: number };
+};
+type EventView = {
+  id: string;
+  day: string;
+  month: string;
+  title: string;
+  native: string;
+  venue: string;
+  city: string;
+  kind: string;
+  songs: number;
+  status: string;
+  accent: string;
+};
 
-async function fetchCommunityPerformances() {
-  const response = await fetch("/api/contributions", { cache: "no-store" });
+async function fetchArchive() {
+  const response = await fetch("/api/archive", { cache: "no-store" });
   if (!response.ok) throw new Error("The community feed is unavailable.");
-  const body = await response.json() as { performances?: CommunityPerformance[] };
-  return body.performances ?? [];
+  return response.json() as Promise<ArchiveData>;
 }
 
-const events = [
-  {
-    id: "mah-2025",
-    day: "11",
-    month: "JAN",
-    title: "Mahmoud Ahmed — The Final Note",
-    native: "ማሕሙድ አሕመድ",
-    venue: "Millennium Hall",
-    city: "Addis Ababa",
-    kind: "Historic performance",
-    songs: 18,
-    status: "Moderator reviewed",
-    accent: "gold",
-  },
-  {
-    id: "fendika-fri",
-    day: "31",
-    month: "JUL",
-    title: "Fendika Friday",
-    native: "የፈንድቃ ዓርብ",
-    venue: "Fendika Cultural Center",
-    city: "Addis Ababa",
-    kind: "Upcoming",
-    songs: 0,
-    status: "Venue confirmed",
-    accent: "green",
-  },
-  {
-    id: "mulatu-london",
-    day: "14",
-    month: "AUG",
-    title: "Mulatu Astatke",
-    native: "ሙላቱ አስታጥቄ",
-    venue: "Barbican Hall",
-    city: "London",
-    kind: "Diaspora",
-    songs: 0,
-    status: "Source backed",
-    accent: "red",
-  },
-  {
-    id: "ethiocolor",
-    day: "12",
-    month: "SEP",
-    title: "Ethiocolor",
-    native: "ኢትዮ ከለር",
-    venue: "Alliance Ethio-Française",
-    city: "Addis Ababa",
-    kind: "Upcoming",
-    songs: 0,
-    status: "Community submitted",
-    accent: "blue",
-  },
-];
-
-const artists = [
-  { name: "Mahmoud Ahmed", native: "ማሕሙድ አሕመድ", sets: 42, genre: "Ethio-jazz · Soul", initials: "MA", tone: "rust" },
-  { name: "Mulatu Astatke", native: "ሙላቱ አስታጥቄ", sets: 87, genre: "Ethio-jazz", initials: "MU", tone: "navy" },
-  { name: "Aster Aweke", native: "አስቴር አወቀ", sets: 31, genre: "Pop · Soul", initials: "AA", tone: "plum" },
-  { name: "Hailu Mergia", native: "ኃይሉ መርጊያ", sets: 56, genre: "Jazz · Funk", initials: "HM", tone: "olive" },
-  { name: "Gigi", native: "ጂጂ", sets: 24, genre: "World · Contemporary", initials: "GG", tone: "ochre" },
-];
-
-const recentSets = [
-  { artist: "Jano Band", native: "ጃኖ ባንድ", venue: "Kana Warehouse", city: "Addis Ababa", date: "18 Jul 2026", songs: 14, confidence: "3 attendees" },
-  { artist: "Kassmasse", native: "ካስማሰ", venue: "The African Jazz Village", city: "Addis Ababa", date: "12 Jul 2026", songs: 11, confidence: "Source backed" },
-  { artist: "Betty G", native: "ቤቲ ጂ", venue: "Sheraton Addis", city: "Addis Ababa", date: "4 Jul 2026", songs: 16, confidence: "Artist confirmed" },
-];
-
 const collections = [
-  { eyebrow: "ARCHIVE COLLECTION", title: "The golden age of Ethiopian music", copy: "Explore landmark performances from the 1960s and 70s.", count: "68 performances", mark: "፷", tone: "dark" },
-  { eyebrow: "CITY GUIDE", title: "Live tonight in Addis", copy: "Small rooms, jazz nights, azmari bets and bigger stages.", count: "12 upcoming events", mark: "AA", tone: "warm" },
-  { eyebrow: "DIASPORA", title: "Ethiopian music around the world", copy: "Follow artists and community stages across the diaspora.", count: "8 cities", mark: "✦", tone: "green" },
+  { eyebrow: "ARCHIVE COLLECTION", title: "Documented performances", copy: "Explore the performances preserved by the community.", stat: "performances" as const, label: "performances", mark: "፷", tone: "dark" },
+  { eyebrow: "ARTIST INDEX", title: "Artists in the archive", copy: "Find performers across generations, genres and scripts.", stat: "artists" as const, label: "artists", mark: "AA", tone: "warm" },
+  { eyebrow: "AROUND THE WORLD", title: "Ethiopian music everywhere", copy: "Follow venues and stages in Ethiopia and across the diaspora.", stat: "countries" as const, label: "countries", mark: "✦", tone: "green" },
 ];
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -111,16 +90,17 @@ export function ZemaApp() {
   const [showAdd, setShowAdd] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [notice, setNotice] = useState("");
-  const [communityPerformances, setCommunityPerformances] = useState<CommunityPerformance[]>([]);
+  const [archive, setArchive] = useState<ArchiveData | null>(null);
+  const [archiveError, setArchiveError] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void fetchCommunityPerformances()
-      .then((performances) => {
-        if (active) setCommunityPerformances(performances);
+    void fetchArchive()
+      .then((data) => {
+        if (active) setArchive(data);
       })
       .catch(() => {
-        // The curated archive remains usable if the community feed is temporarily unavailable.
+        if (active) setArchiveError(true);
       });
     return () => {
       active = false;
@@ -148,7 +128,8 @@ export function ZemaApp() {
       throw new Error(body.error ?? "The contribution could not be saved.");
     }
 
-    setCommunityPerformances(await fetchCommunityPerformances());
+    setArchive(await fetchArchive());
+    setArchiveError(false);
     setShowAdd(false);
     setNotice("Contribution saved for community review");
   }
@@ -171,6 +152,11 @@ export function ZemaApp() {
     setNotice(attended.includes(id) ? "Removed from your concert history" : "Added privately to your concert history");
   }
 
+  const events = useMemo(() => (archive?.events ?? []).map(toEventView), [archive]);
+  const upcomingEvents = useMemo(() => events.filter((event) => event.kind === "Upcoming"), [events]);
+  const artists = useMemo(() => (archive?.artists ?? []).map(toArtistView), [archive]);
+  const recentSets = useMemo(() => (archive?.performances ?? []).map(toRecentSet), [archive]);
+
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return [];
@@ -181,7 +167,7 @@ export function ZemaApp() {
       `${artist.name} ${artist.native} ${artist.genre}`.toLowerCase().includes(term),
     ).map((artist) => ({ type: "Artist", title: artist.name, meta: `${artist.native} · ${artist.genre}` }));
     return [...artistResults, ...eventResults].slice(0, 7);
-  }, [query]);
+  }, [artists, events, query]);
 
   const displayedSaved = events.filter((event) => saved.includes(event.id));
 
@@ -226,27 +212,27 @@ export function ZemaApp() {
                 <button className="text-action" onClick={() => setView("explore")}>Explore the archive <span>→</span></button>
               </div>
               <div className="hero-stats" aria-label="Archive statistics">
-                <div><strong>1,248</strong><span>Performances</span></div>
-                <div><strong>386</strong><span>Artists</span></div>
-                <div><strong>127</strong><span>Venues</span></div>
-                <div><strong>14</strong><span>Countries</span></div>
+                <div><strong>{archive?.stats.performances ?? "—"}</strong><span>Performances</span></div>
+                <div><strong>{archive?.stats.artists ?? "—"}</strong><span>Artists</span></div>
+                <div><strong>{archive?.stats.venues ?? "—"}</strong><span>Venues</span></div>
+                <div><strong>{archive?.stats.countries ?? "—"}</strong><span>Countries</span></div>
               </div>
             </section>
 
             <section className="content-section upcoming">
               <SectionHeading eyebrow="COMING UP" title="Live music, near and far" action="View all events" onAction={() => { setView("explore"); setFilter("Events"); }} />
-              <div className="event-grid">
-                {events.slice(1).map((event) => (
+              {upcomingEvents.length ? <div className="event-grid">
+                {upcomingEvents.slice(0, 3).map((event) => (
                   <EventCard key={event.id} event={event} saved={saved.includes(event.id)} onSave={() => toggleSaved(event.id)} />
                 ))}
-              </div>
+              </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No upcoming events have been added yet." />}
             </section>
 
             <section className="archive-band">
               <div className="content-section">
                 <SectionHeading eyebrow="RECENTLY DOCUMENTED" title="Fresh from the archive" action="Explore all setlists" onAction={() => setView("explore")} inverse />
-                <div className="setlist-table">
-                  {[...communityPerformances.map(toRecentSet), ...recentSets].slice(0, 20).map((set, index) => (
+                {recentSets.length ? <div className="setlist-table">
+                  {recentSets.slice(0, 20).map((set, index) => (
                     <article className="setlist-row" key={`${set.artist}-${set.date}-${index}`}>
                       <div className="set-number">0{index + 1}</div>
                       <div className="set-identity"><strong>{set.artist}</strong><span>{set.native}</span></div>
@@ -256,7 +242,7 @@ export function ZemaApp() {
                       <button aria-label={`View ${set.artist} performance`}>→</button>
                     </article>
                   ))}
-                </div>
+                </div> : <InlineArchiveState inverse loading={!archive && !archiveError} error={archiveError} empty="No performances have been documented yet." />}
               </div>
             </section>
 
@@ -269,7 +255,7 @@ export function ZemaApp() {
                     <span className="collection-eyebrow">{collection.eyebrow}</span>
                     <strong>{collection.title}</strong>
                     <span className="collection-copy">{collection.copy}</span>
-                    <span className="collection-count">{collection.count} <b>→</b></span>
+                    <span className="collection-count">{archive?.stats[collection.stat] ?? "—"} {collection.label} <b>→</b></span>
                   </button>
                 ))}
               </div>
@@ -277,7 +263,7 @@ export function ZemaApp() {
 
             <section className="content-section artist-section">
               <SectionHeading eyebrow="ARTISTS" title="Voices in the archive" action="Browse all artists" onAction={() => { setView("explore"); setFilter("Artists"); }} />
-              <div className="artist-strip">
+              {artists.length ? <div className="artist-strip">
                 {artists.map((artist) => (
                   <article className="artist-card" key={artist.name}>
                     <div className={`artist-avatar ${artist.tone}`}>{artist.initials}</div>
@@ -287,7 +273,7 @@ export function ZemaApp() {
                     <div><b>{artist.sets}</b> documented performances</div>
                   </article>
                 ))}
-              </div>
+              </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No artists have been added yet." />}
             </section>
 
             <section className="contribution-callout">
@@ -315,16 +301,16 @@ export function ZemaApp() {
             </div>
             {(filter === "All" || filter === "Events") && (
               <div className="explore-block">
-                <h2>Events and performances <span>{events.length + recentSets.length}</span></h2>
-                <div className="event-grid">
+                <h2>Events and performances <span>{archive?.stats.performances ?? 0}</span></h2>
+                {events.length ? <div className="event-grid">
                   {events.map((event) => <EventCard key={event.id} event={event} saved={saved.includes(event.id)} onSave={() => toggleSaved(event.id)} onAttend={() => toggleAttendance(event.id)} attended={attended.includes(event.id)} />)}
-                </div>
+                </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No events have been added yet." />}
               </div>
             )}
             {(filter === "All" || filter === "Artists") && (
               <div className="explore-block">
                 <h2>Artists <span>{artists.length}</span></h2>
-                <div className="artist-strip">
+                {artists.length ? <div className="artist-strip">
                   {artists.map((artist) => (
                     <article className="artist-card" key={artist.name}>
                       <div className={`artist-avatar ${artist.tone}`}>{artist.initials}</div>
@@ -332,18 +318,17 @@ export function ZemaApp() {
                       <div><b>{artist.sets}</b> documented performances</div>
                     </article>
                   ))}
-                </div>
+                </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No artists have been added yet." />}
               </div>
             )}
             {(filter === "All" || filter === "Venues") && (
               <div className="explore-block">
-                <h2>Venues <span>4</span></h2>
-                <div className="venue-list">
-                  {["Fendika Cultural Center|Kazanchis, Addis Ababa|84", "Millennium Hall|Bole, Addis Ababa|47", "Kana Warehouse|Saris, Addis Ababa|29", "African Jazz Village|Ghion Hotel, Addis Ababa|66"].map((venue) => {
-                    const [name, place, count] = venue.split("|");
-                    return <article key={name}><div className="venue-pin">⌖</div><div><strong>{name}</strong><span>{place}</span></div><small>{count} performances</small><button>→</button></article>;
-                  })}
-                </div>
+                <h2>Venues <span>{archive?.stats.venues ?? 0}</span></h2>
+                {archive?.venues.length ? <div className="venue-list">
+                  {archive.venues.map((venue) => (
+                    <article key={venue.id ?? venue.display_name}><div className="venue-pin">⌖</div><div><strong>{venue.display_name}</strong><span>{[venue.address, venue.city, venue.country].filter(Boolean).join(", ")}</span></div><small>{venue.events?.length ?? 0} events</small><button>→</button></article>
+                  ))}
+                </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No venues have been added yet." />}
               </div>
             )}
           </section>
@@ -414,19 +399,53 @@ function readDeviceList(key: string): string[] {
   }
 }
 
-function toRecentSet(performance: CommunityPerformance) {
+function toEventView(event: DbEvent, index: number): EventView {
+  const date = new Date(event.event_date);
+  const upcoming = date.getTime() >= Date.now() && event.status === "announced";
+  return {
+    id: `event-${event.id}`,
+    day: new Intl.DateTimeFormat("en-GB", { day: "2-digit", timeZone: "UTC" }).format(date),
+    month: new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(date).toUpperCase(),
+    title: event.title,
+    native: "",
+    venue: event.venues?.display_name ?? "Venue to be confirmed",
+    city: [event.venues?.city, event.venues?.country].filter(Boolean).join(", "),
+    kind: upcoming ? "Upcoming" : "Archived event",
+    songs: 0,
+    status: event.status === "announced" ? "Announced" : sentenceCase(event.status),
+    accent: ["gold", "green", "red", "blue"][index % 4],
+  };
+}
+
+function toArtistView(artist: DbArtist, index: number) {
+  const words = artist.display_name.trim().split(/\s+/);
+  return {
+    name: artist.display_name,
+    native: artist.native_name ?? "",
+    sets: artist.performances?.length ?? 0,
+    genre: artist.genre ?? "Genre not specified",
+    initials: words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join(""),
+    tone: ["rust", "navy", "plum", "olive", "ochre"][index % 5],
+  };
+}
+
+function toRecentSet(performance: DbPerformance) {
   const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
     .format(new Date(performance.performance_date));
-  const confidence = performance.status === "source_backed" ? "Source backed" : "Community submitted";
+  const linkedVenue = performance.events?.venues;
   return {
-    artist: performance.submitted_artist || "Unknown artist",
-    native: "Community contribution",
-    venue: performance.submitted_venue || "Unknown venue",
-    city: "Pending community review",
+    artist: performance.artists?.display_name || performance.submitted_artist || "Unknown artist",
+    native: performance.artists?.native_name || "Community contribution",
+    venue: linkedVenue?.display_name || performance.submitted_venue || "Unknown venue",
+    city: linkedVenue ? [linkedVenue.city, linkedVenue.country].filter(Boolean).join(", ") : "Pending community review",
     date,
     songs: performance.setlist_items?.length ?? 0,
-    confidence,
+    confidence: sentenceCase(performance.status),
   };
+}
+
+function sentenceCase(value: string) {
+  return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function SearchBox({ query, setQuery, results, large = false }: { query: string; setQuery: (value: string) => void; results: { type: string; title: string; meta: string }[]; large?: boolean }) {
@@ -453,7 +472,7 @@ function SectionHeading({ eyebrow, title, action, onAction, inverse = false }: {
   return <div className={`section-heading ${inverse ? "inverse" : ""}`}><div><p className="kicker"><span /> {eyebrow}</p><h2>{title}</h2></div>{action && <button onClick={onAction}>{action} <span>→</span></button>}</div>;
 }
 
-function EventCard({ event, saved, onSave, onAttend, attended }: { event: typeof events[number]; saved: boolean; onSave: () => void; onAttend?: () => void; attended?: boolean }) {
+function EventCard({ event, saved, onSave, onAttend, attended }: { event: EventView; saved: boolean; onSave: () => void; onAttend?: () => void; attended?: boolean }) {
   return (
     <article className="event-card">
       <div className={`event-date ${event.accent}`}><strong>{event.day}</strong><span>{event.month}</span></div>
@@ -464,6 +483,11 @@ function EventCard({ event, saved, onSave, onAttend, attended }: { event: typeof
       <div className="event-footer"><span><b>✓</b>{event.status}</span>{onAttend ? <button onClick={onAttend}>{attended ? "Attended ✓" : "I was there"}</button> : <button>Details →</button>}</div>
     </article>
   );
+}
+
+function InlineArchiveState({ loading, error, empty, inverse = false }: { loading: boolean; error: boolean; empty: string; inverse?: boolean }) {
+  const message = loading ? "Loading the community archive…" : error ? "The archive could not be loaded. Please refresh and try again." : empty;
+  return <p className={`archive-state ${inverse ? "inverse" : ""}`} role={error ? "alert" : "status"}>{message}</p>;
 }
 
 function EmptyState({ mark, title, copy, action, onAction }: { mark: string; title: string; copy: string; action: string; onAction: () => void }) {

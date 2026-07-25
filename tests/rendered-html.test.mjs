@@ -5,9 +5,10 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("ships the Vercel-compatible Zema Archive experience", async () => {
-  const [page, app, contributionApi, layout, css, packageJson, schema, envExample] = await Promise.all([
+  const [page, app, archiveApi, contributionApi, layout, css, packageJson, schema, envExample] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/zema-app.tsx", root), "utf8"),
+    readFile(new URL("app/api/archive/route.ts", root), "utf8"),
     readFile(new URL("app/api/contributions/route.ts", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
@@ -22,7 +23,11 @@ test("ships the Vercel-compatible Zema Archive experience", async () => {
   assert.match(app, /Add a performance/);
   assert.match(app, /I was there/);
   assert.match(app, /fetch\\?\("\/api\/contributions"/);
+  assert.match(app, /fetch\("\/api\/archive"/);
   assert.match(app, /zema-access-token/);
+  assert.match(archiveApi, /events\?select=/);
+  assert.match(archiveApi, /performances\?select=/);
+  assert.match(archiveApi, /stats:/);
   assert.match(contributionApi, /export async function POST/);
   assert.match(contributionApi, /setlist_items/);
   assert.match(layout, /Zema Archive/);
