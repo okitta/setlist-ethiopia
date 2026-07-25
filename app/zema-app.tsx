@@ -63,6 +63,12 @@ type EventView = {
   status: string;
   accent: string;
 };
+const PAGE_SIZE = {
+  recent: 5,
+  events: 6,
+  artists: 10,
+  venues: 8,
+};
 
 async function fetchArchive() {
   const response = await fetch("/api/archive", { cache: "no-store" });
@@ -92,6 +98,10 @@ export function ZemaApp() {
   const [notice, setNotice] = useState("");
   const [archive, setArchive] = useState<ArchiveData | null>(null);
   const [archiveError, setArchiveError] = useState(false);
+  const [recentPage, setRecentPage] = useState(1);
+  const [eventPage, setEventPage] = useState(1);
+  const [artistPage, setArtistPage] = useState(1);
+  const [venuePage, setVenuePage] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -156,6 +166,10 @@ export function ZemaApp() {
   const upcomingEvents = useMemo(() => events.filter((event) => event.kind === "Upcoming"), [events]);
   const artists = useMemo(() => (archive?.artists ?? []).map(toArtistView), [archive]);
   const recentSets = useMemo(() => (archive?.performances ?? []).map(toRecentSet), [archive]);
+  const recentPagination = paginate(recentSets, recentPage, PAGE_SIZE.recent);
+  const eventPagination = paginate(events, eventPage, PAGE_SIZE.events);
+  const artistPagination = paginate(artists, artistPage, PAGE_SIZE.artists);
+  const venuePagination = paginate(archive?.venues ?? [], venuePage, PAGE_SIZE.venues);
 
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -232,9 +246,9 @@ export function ZemaApp() {
               <div className="content-section">
                 <SectionHeading eyebrow="RECENTLY DOCUMENTED" title="Fresh from the archive" action="Explore all setlists" onAction={() => setView("explore")} inverse />
                 {recentSets.length ? <div className="setlist-table">
-                  {recentSets.slice(0, 20).map((set, index) => (
+                  {recentPagination.items.map((set, index) => (
                     <article className="setlist-row" key={`${set.artist}-${set.date}-${index}`}>
-                      <div className="set-number">0{index + 1}</div>
+                      <div className="set-number">{String((recentPagination.page - 1) * PAGE_SIZE.recent + index + 1).padStart(2, "0")}</div>
                       <div className="set-identity"><strong>{set.artist}</strong><span>{set.native}</span></div>
                       <div className="set-place"><strong>{set.venue}</strong><span>{set.city}</span></div>
                       <div className="set-date"><strong>{set.date}</strong><span>{set.songs} songs</span></div>
@@ -242,6 +256,7 @@ export function ZemaApp() {
                       <button aria-label={`View ${set.artist} performance`}>→</button>
                     </article>
                   ))}
+                  <Pagination page={recentPagination.page} totalPages={recentPagination.totalPages} onPageChange={setRecentPage} inverse label="Recently documented performances" />
                 </div> : <InlineArchiveState inverse loading={!archive && !archiveError} error={archiveError} empty="No performances have been documented yet." />}
               </div>
             </section>
@@ -264,7 +279,7 @@ export function ZemaApp() {
             <section className="content-section artist-section">
               <SectionHeading eyebrow="ARTISTS" title="Voices in the archive" action="Browse all artists" onAction={() => { setView("explore"); setFilter("Artists"); }} />
               {artists.length ? <div className="artist-strip">
-                {artists.map((artist) => (
+                {artists.slice(0, 5).map((artist) => (
                   <article className="artist-card" key={artist.name}>
                     <div className={`artist-avatar ${artist.tone}`}>{artist.initials}</div>
                     <strong>{artist.name}</strong>
@@ -296,22 +311,23 @@ export function ZemaApp() {
             <SearchBox query={query} setQuery={setQuery} results={results} large />
             <div className="filter-row" aria-label="Explore filters">
               {(["All", "Events", "Artists", "Venues"] as ExploreFilter[]).map((item) => (
-                <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>
+                <button key={item} className={filter === item ? "selected" : ""} onClick={() => { setFilter(item); setEventPage(1); setArtistPage(1); setVenuePage(1); }}>{item}</button>
               ))}
             </div>
             {(filter === "All" || filter === "Events") && (
               <div className="explore-block">
                 <h2>Events and performances <span>{archive?.stats.performances ?? 0}</span></h2>
                 {events.length ? <div className="event-grid">
-                  {events.map((event) => <EventCard key={event.id} event={event} saved={saved.includes(event.id)} onSave={() => toggleSaved(event.id)} onAttend={() => toggleAttendance(event.id)} attended={attended.includes(event.id)} />)}
+                  {eventPagination.items.map((event) => <EventCard key={event.id} event={event} saved={saved.includes(event.id)} onSave={() => toggleSaved(event.id)} onAttend={() => toggleAttendance(event.id)} attended={attended.includes(event.id)} />)}
                 </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No events have been added yet." />}
+                <Pagination page={eventPagination.page} totalPages={eventPagination.totalPages} onPageChange={setEventPage} label="Events and performances" />
               </div>
             )}
             {(filter === "All" || filter === "Artists") && (
               <div className="explore-block">
                 <h2>Artists <span>{artists.length}</span></h2>
                 {artists.length ? <div className="artist-strip">
-                  {artists.map((artist) => (
+                  {artistPagination.items.map((artist) => (
                     <article className="artist-card" key={artist.name}>
                       <div className={`artist-avatar ${artist.tone}`}>{artist.initials}</div>
                       <strong>{artist.name}</strong><span>{artist.native}</span><small>{artist.genre}</small>
@@ -319,16 +335,18 @@ export function ZemaApp() {
                     </article>
                   ))}
                 </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No artists have been added yet." />}
+                <Pagination page={artistPagination.page} totalPages={artistPagination.totalPages} onPageChange={setArtistPage} label="Artists" />
               </div>
             )}
             {(filter === "All" || filter === "Venues") && (
               <div className="explore-block">
                 <h2>Venues <span>{archive?.stats.venues ?? 0}</span></h2>
                 {archive?.venues.length ? <div className="venue-list">
-                  {archive.venues.map((venue) => (
+                  {venuePagination.items.map((venue) => (
                     <article key={venue.id ?? venue.display_name}><div className="venue-pin">⌖</div><div><strong>{venue.display_name}</strong><span>{[venue.address, venue.city, venue.country].filter(Boolean).join(", ")}</span></div><small>{venue.events?.length ?? 0} events</small><button>→</button></article>
                   ))}
                 </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No venues have been added yet." />}
+                <Pagination page={venuePagination.page} totalPages={venuePagination.totalPages} onPageChange={setVenuePage} label="Venues" />
               </div>
             )}
           </section>
@@ -448,6 +466,13 @@ function sentenceCase(value: string) {
   return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
+function paginate<T>(items: T[], requestedPage: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+  const start = (page - 1) * pageSize;
+  return { items: items.slice(start, start + pageSize), page, totalPages };
+}
+
 function SearchBox({ query, setQuery, results, large = false }: { query: string; setQuery: (value: string) => void; results: { type: string; title: string; meta: string }[]; large?: boolean }) {
   return (
     <div className={`search-wrap ${large ? "search-large" : ""}`}>
@@ -488,6 +513,37 @@ function EventCard({ event, saved, onSave, onAttend, attended }: { event: EventV
 function InlineArchiveState({ loading, error, empty, inverse = false }: { loading: boolean; error: boolean; empty: string; inverse?: boolean }) {
   const message = loading ? "Loading the community archive…" : error ? "The archive could not be loaded. Please refresh and try again." : empty;
   return <p className={`archive-state ${inverse ? "inverse" : ""}`} role={error ? "alert" : "status"}>{message}</p>;
+}
+
+function Pagination({ page, totalPages, onPageChange, label, inverse = false }: { page: number; totalPages: number; onPageChange: (page: number) => void; label: string; inverse?: boolean }) {
+  if (totalPages <= 1) return null;
+  const pages = paginationWindow(page, totalPages);
+
+  function changePage(nextPage: number) {
+    onPageChange(nextPage);
+    window.requestAnimationFrame(() => {
+      document.querySelector(`[aria-label="${label} pagination"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  return (
+    <nav className={`pagination ${inverse ? "inverse" : ""}`} aria-label={`${label} pagination`}>
+      <button type="button" onClick={() => changePage(page - 1)} disabled={page === 1} aria-label={`Previous ${label} page`}>← <span>Previous</span></button>
+      <div>
+        {pages.map((item, index) => item === "…" ? <span className="pagination-gap" key={`gap-${index}`}>…</span> : (
+          <button type="button" key={item} className={item === page ? "current" : ""} aria-current={item === page ? "page" : undefined} onClick={() => changePage(item)}>{item}</button>
+        ))}
+      </div>
+      <button type="button" onClick={() => changePage(page + 1)} disabled={page === totalPages} aria-label={`Next ${label} page`}><span>Next</span> →</button>
+    </nav>
+  );
+}
+
+function paginationWindow(page: number, totalPages: number): Array<number | "…"> {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  if (page <= 4) return [1, 2, 3, 4, 5, "…", totalPages];
+  if (page >= totalPages - 3) return [1, "…", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  return [1, "…", page - 1, page, page + 1, "…", totalPages];
 }
 
 function EmptyState({ mark, title, copy, action, onAction }: { mark: string; title: string; copy: string; action: string; onAction: () => void }) {

@@ -25,6 +25,8 @@ test("ships the Vercel-compatible Zema Archive experience", async () => {
   assert.match(app, /fetch\\?\("\/api\/contributions"/);
   assert.match(app, /fetch\("\/api\/archive"/);
   assert.match(app, /zema-access-token/);
+  assert.match(app, /function Pagination/);
+  assert.match(app, /aria-current=/);
   assert.match(archiveApi, /events\?select=/);
   assert.match(archiveApi, /performances\?select=/);
   assert.match(archiveApi, /stats:/);

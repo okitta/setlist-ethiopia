@@ -22,10 +22,10 @@ async function count(table: string) {
 export async function GET() {
   try {
     const [events, performances, artists, venues, performanceCount, artistCount, venueCount] = await Promise.all([
-      read("events?select=id,slug,title,event_date,status,venues(display_name,city,country)&order=event_date.asc&limit=100"),
-      read("performances?select=id,submitted_artist,submitted_venue,performance_date,status,created_at,artists(display_name,native_name,genre),events(title,venues(display_name,city,country)),setlist_items(id)&order=performance_date.desc&limit=100"),
-      read("artists?select=id,slug,display_name,native_name,genre,status,performances(id)&order=display_name.asc&limit=100"),
-      read("venues?select=id,slug,display_name,native_name,city,country,address,events(id)&order=display_name.asc&limit=100"),
+      read("events?select=id,slug,title,event_date,status,venues(display_name,city,country)&order=event_date.asc&limit=1000"),
+      read("performances?select=id,submitted_artist,submitted_venue,performance_date,status,created_at,artists(display_name,native_name,genre),events(title,venues(display_name,city,country)),setlist_items(id)&order=performance_date.desc&limit=1000"),
+      read("artists?select=id,slug,display_name,native_name,genre,status,performances(id)&order=display_name.asc&limit=1000"),
+      read("venues?select=id,slug,display_name,native_name,city,country,address,events(id)&order=display_name.asc&limit=1000"),
       count("performances"),
       count("artists"),
       count("venues"),
