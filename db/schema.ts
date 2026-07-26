@@ -14,31 +14,35 @@ export const artists = pgTable("artists", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull(),
   displayName: text("display_name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
   nativeName: text("native_name"),
   genre: text("genre"),
+  description: text("description"),
   status: text("status").notNull().default("community"),
   createdAt,
-}, (table) => [uniqueIndex("artists_slug_idx").on(table.slug), index("artists_name_idx").on(table.displayName)]);
+}, (table) => [uniqueIndex("artists_slug_idx").on(table.slug), index("artists_name_idx").on(table.displayName), uniqueIndex("artists_normalized_name_idx").on(table.normalizedName)]);
 
 export const artistNames = pgTable("artist_names", {
   id: serial("id").primaryKey(),
   artistId: integer("artist_id").notNull().references(() => artists.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
   language: text("language"),
   script: text("script"),
   kind: text("kind").notNull().default("alias"),
-}, (table) => [index("artist_names_artist_idx").on(table.artistId), index("artist_names_name_idx").on(table.name)]);
+}, (table) => [index("artist_names_artist_idx").on(table.artistId), index("artist_names_name_idx").on(table.name), uniqueIndex("artist_names_artist_normalized_idx").on(table.artistId, table.normalizedName)]);
 
 export const venues = pgTable("venues", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull(),
   displayName: text("display_name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
   nativeName: text("native_name"),
   city: text("city").notNull(),
   country: text("country").notNull().default("Ethiopia"),
   address: text("address"),
   createdAt,
-}, (table) => [uniqueIndex("venues_slug_idx").on(table.slug), index("venues_city_idx").on(table.city)]);
+}, (table) => [uniqueIndex("venues_slug_idx").on(table.slug), index("venues_city_idx").on(table.city), uniqueIndex("venues_normalized_name_idx").on(table.normalizedName)]);
 
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),

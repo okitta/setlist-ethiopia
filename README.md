@@ -38,6 +38,20 @@ npm run db:generate
 
 Apply the generated SQL from `drizzle/` using the Supabase SQL Editor before accepting contributions.
 
+When updating an existing deployment, apply every unapplied migration in filename order. The AI identity feature requires `drizzle/0001_ai_identity.sql`.
+
+## Gemini-assisted archive intelligence
+
+Add `GEMINI_API_KEY` to Vercel as a server-only environment variable. Do not prefix it with `NEXT_PUBLIC_`. The default `gemini-2.5-flash-lite` model is selected for free-tier structured extraction. Optional safeguards:
+
+```text
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_APP_RPM_LIMIT=5
+GEMINI_APP_DAILY_LIMIT=100
+```
+
+The archive remains functional when Gemini is unavailable or the application quota is reached. Search is database-first; Gemini only ranks known candidates. Contribution enrichment is treated as unreviewed metadata and never bypasses community review. Google enforces the API key's actual project limits in addition to these best-effort application limits. The UI discloses that contribution context may be processed by Gemini; review Google’s current free-tier data-use terms before enabling it for production.
+
 ## Deploy to Vercel
 
 1. Import `okitta/setlist-ethiopia` in Vercel.

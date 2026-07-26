@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type View = "home" | "explore" | "saved" | "profile";
+type View = "home" | "explore" | "artist" | "saved" | "profile";
 type ExploreFilter = "All" | "Events" | "Artists" | "Venues";
 type ContributionInput = { artist: string; date: string; venue: string; songs: string; source: string };
 type AuthUser = {
@@ -67,6 +67,13 @@ type EventView = {
   songs: number;
   status: string;
   accent: string;
+};
+type ArtistAnalytics = {
+  artist: { id: number; display_name: string; native_name?: string; genre?: string; description?: string };
+  metrics: { performances: number; documentedSongs: number; uniqueSongs: number; recentPerformances: number };
+  topSongs: Array<{ title: string; count: number }>;
+  recentTopSongs: Array<{ title: string; count: number }>;
+  topVenues: Array<{ name: string; count: number }>;
 };
 const PAGE_SIZE = {
   recent: 5,
@@ -143,6 +150,8 @@ export function ZemaApp() {
   const [eventPage, setEventPage] = useState(1);
   const [artistPage, setArtistPage] = useState(1);
   const [venuePage, setVenuePage] = useState(1);
+  const [selectedArtistId, setSelectedArtistId] = useState<number | null>(null);
+  const [artistAnalytics, setArtistAnalytics] = useState<ArtistAnalytics | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -157,6 +166,19 @@ export function ZemaApp() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedArtistId) return;
+    let active = true;
+    void fetch(`/api/artists/${selectedArtistId}/analytics`, { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<ArtistAnalytics> : null)
+      .then((data) => {
+        if (active) setArtistAnalytics(data);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedArtistId]);
 
   useEffect(() => {
     let active = true;
@@ -239,6 +261,12 @@ export function ZemaApp() {
     setAuthUser(null);
     setView("home");
     setNotice("You have been signed out");
+  }
+
+  function openArtist(id: number) {
+    setArtistAnalytics(null);
+    setSelectedArtistId(id);
+    setView("artist");
   }
 
   const events = useMemo(() => (archive?.events ?? []).map(toEventView), [archive]);
@@ -369,13 +397,13 @@ export function ZemaApp() {
               <SectionHeading eyebrow="ARTISTS" title="Voices in the archive" action="Browse all artists" onAction={() => { setView("explore"); setFilter("Artists"); }} />
               {artists.length ? <div className="artist-strip">
                 {artists.slice(0, 5).map((artist) => (
-                  <article className="artist-card" key={artist.name}>
+                  <button className="artist-card" key={artist.id} onClick={() => openArtist(artist.id)}>
                     <div className={`artist-avatar ${artist.tone}`}>{artist.initials}</div>
                     <strong>{artist.name}</strong>
                     <span>{artist.native}</span>
                     <small>{artist.genre}</small>
                     <div><b>{artist.sets}</b> documented performances</div>
-                  </article>
+                  </button>
                 ))}
               </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No artists have been added yet." />}
             </section>
@@ -417,11 +445,11 @@ export function ZemaApp() {
                 <h2>Artists <span>{artists.length}</span></h2>
                 {artists.length ? <div className="artist-strip">
                   {artistPagination.items.map((artist) => (
-                    <article className="artist-card" key={artist.name}>
+                    <button className="artist-card" key={artist.id} onClick={() => openArtist(artist.id)}>
                       <div className={`artist-avatar ${artist.tone}`}>{artist.initials}</div>
                       <strong>{artist.name}</strong><span>{artist.native}</span><small>{artist.genre}</small>
                       <div><b>{artist.sets}</b> documented performances</div>
-                    </article>
+                    </button>
                   ))}
                 </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No artists have been added yet." />}
                 <Pagination page={artistPagination.page} totalPages={artistPagination.totalPages} onPageChange={setArtistPage} label="Artists" />
@@ -437,6 +465,31 @@ export function ZemaApp() {
                 </div> : <InlineArchiveState loading={!archive && !archiveError} error={archiveError} empty="No venues have been added yet." />}
                 <Pagination page={venuePagination.page} totalPages={venuePagination.totalPages} onPageChange={setVenuePage} label="Venues" />
               </div>
+            )}
+          </section>
+        )}
+
+        {view === "artist" && (
+          <section className="page-view content-section">
+            <button className="back-link" onClick={() => setView("explore")}>← Back to artists</button>
+            {!artistAnalytics ? <InlineArchiveState loading error={false} empty="" /> : (
+              <>
+                <p className="kicker"><span /> ARTIST SET ANALYTICS</p>
+                <h1>{artistAnalytics.artist.display_name}</h1>
+                <p className="native-name">{artistAnalytics.artist.native_name}</p>
+                <p className="page-intro">{artistAnalytics.artist.description || artistAnalytics.artist.genre || "Community-maintained artist analytics."}</p>
+                <div className="artist-metrics">
+                  <div><strong>{artistAnalytics.metrics.performances}</strong><span>Performances</span></div>
+                  <div><strong>{artistAnalytics.metrics.documentedSongs}</strong><span>Song appearances</span></div>
+                  <div><strong>{artistAnalytics.metrics.uniqueSongs}</strong><span>Unique songs</span></div>
+                  <div><strong>{artistAnalytics.metrics.recentPerformances}</strong><span>Sets in the last year</span></div>
+                </div>
+                <div className="analytics-grid">
+                  <AnalyticsList title="Most played songs" items={artistAnalytics.topSongs.map((item) => ({ label: item.title, value: `${item.count} plays` }))} empty="No songs documented yet." />
+                  <AnalyticsList title="Most played in recent sets" items={artistAnalytics.recentTopSongs.map((item) => ({ label: item.title, value: `${item.count} plays` }))} empty="No songs documented in the last year." />
+                  <AnalyticsList title="Most frequent venues" items={artistAnalytics.topVenues.map((item) => ({ label: item.name, value: `${item.count} sets` }))} empty="No venue history available." />
+                </div>
+              </>
             )}
           </section>
         )}
@@ -540,6 +593,7 @@ function toEventView(event: DbEvent, index: number): EventView {
 function toArtistView(artist: DbArtist, index: number) {
   const words = artist.display_name.trim().split(/\s+/);
   return {
+    id: artist.id,
     name: artist.display_name,
     native: artist.native_name ?? "",
     sets: artist.performances?.length ?? 0,
@@ -617,6 +671,15 @@ function InlineArchiveState({ loading, error, empty, inverse = false }: { loadin
   return <p className={`archive-state ${inverse ? "inverse" : ""}`} role={error ? "alert" : "status"}>{message}</p>;
 }
 
+function AnalyticsList({ title, items, empty }: { title: string; items: Array<{ label: string; value: string }>; empty: string }) {
+  return <section className="analytics-list"><h2>{title}</h2>{items.length ? <ol>{items.map((item) => <li key={item.label}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : <p>{empty}</p>}</section>;
+}
+
+function FieldSuggestions({ items, onChoose }: { items: Array<{ value: string; meta: string }>; onChoose: (value: string) => void }) {
+  if (!items.length) return null;
+  return <span className="field-suggestions" aria-label="Archive suggestions">{items.map((item) => <button type="button" key={`${item.value}-${item.meta}`} onClick={() => onChoose(item.value)}><strong>{item.value}</strong><small>{item.meta || "Archive match"}</small></button>)}</span>;
+}
+
 function Pagination({ page, totalPages, onPageChange, label, inverse = false }: { page: number; totalPages: number; onPageChange: (page: number) => void; label: string; inverse?: boolean }) {
   if (totalPages <= 1) return null;
   const pages = paginationWindow(page, totalPages);
@@ -661,7 +724,30 @@ function ContributionModal({ onClose, onSubmit, onSignIn }: { onClose: () => voi
   const [source, setSource] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [suggestionState, setSuggestionState] = useState<{ query: string; items: Array<{ value: string; meta: string }> }>({ query: "", items: [] });
   const canContinue = step === 1 ? artist.trim().length > 1 : step === 2 ? Boolean(date && venue.trim()) : true;
+
+  useEffect(() => {
+    const kind = step === 1 ? "artist" : step === 2 ? "venue" : null;
+    const value = kind === "artist" ? artist : venue;
+    const accessToken = window.localStorage.getItem("zema-access-token");
+    if (!kind || value.trim().length < 2 || !accessToken) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      void fetch(`/api/ai/suggestions?kind=${kind}&q=${encodeURIComponent(value.trim())}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
+      }).then(async (response) => response.ok ? response.json() as Promise<{ suggestions?: Array<{ value: string; meta: string }> }> : null)
+        .then((body) => {
+          if (body) setSuggestionState({ query: value.trim(), items: body.suggestions || [] });
+        })
+        .catch(() => undefined);
+    }, 350);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [artist, step, venue]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -690,8 +776,8 @@ function ContributionModal({ onClose, onSubmit, onSignIn }: { onClose: () => voi
         </div>
         <p className="step-label">Step {step} of 5 · {["Who performed?", "When and where?", "What was played?", "What supports this?", "Review"][step - 1]}</p>
         <form onSubmit={submit}>
-          {step === 1 && <label>Artist or group<span>Search in Ethiopic or Latin script</span><input autoFocus value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="e.g. Mulatu Astatke / ሙላቱ አስታጥቄ" required /></label>}
-          {step === 2 && <div className="form-grid"><label>Date<span>Gregorian date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></label><label>Venue<span>Start typing a known venue</span><input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Fendika Cultural Center" required /></label></div>}
+          {step === 1 && <label>Artist or group<span>Search in Ethiopic or Latin script</span><input autoFocus value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="e.g. Mulatu Astatke / ሙላቱ አስታጥቄ" required />{suggestionState.query === artist.trim() && <FieldSuggestions items={suggestionState.items} onChoose={setArtist} />}</label>}
+          {step === 2 && <div className="form-grid"><label>Date<span>Gregorian date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></label><label>Venue<span>Start typing a known venue</span><input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Fendika Cultural Center" required />{suggestionState.query === venue.trim() && <FieldSuggestions items={suggestionState.items} onChoose={setVenue} />}</label></div>}
           {step === 3 && <label>Songs in order<span>One song per line. Partial lists and “unknown song” are welcome.</span><textarea value={songs} onChange={(e) => setSongs(e.target.value)} placeholder={"Tizita\nYègellé Tezeta\nUnknown song\nYekermo Sew"} rows={7} /></label>}
           {step === 4 && <label>Source or memory note<span>A poster, article, video link, ticket, or first-hand memory helps others verify the record.</span><textarea value={source} onChange={(e) => setSource(e.target.value)} placeholder="I attended this performance, or paste a public source link..." rows={5} /></label>}
           {step === 5 && <div className="review-card"><div><span>Artist</span><strong>{artist}</strong></div><div><span>Date & venue</span><strong>{date} · {venue}</strong></div><div><span>Setlist</span><strong>{songs ? `${songs.split("\n").filter(Boolean).length} songs added` : "No songs yet — can be added later"}</strong></div><div><span>Evidence</span><strong>{source || "First-hand community submission"}</strong></div><p>✓ Your contribution will be public and attributed after community review. Your email is never displayed.</p></div>}
@@ -701,7 +787,7 @@ function ContributionModal({ onClose, onSubmit, onSignIn }: { onClose: () => voi
             <button type="submit" className="primary-action" disabled={!canContinue || saving}>{saving ? "Saving…" : step === 5 ? "Submit for review" : "Continue"} <span>→</span></button>
           </div>
         </form>
-        <small className="draft-note">Draft progress is kept while this form is open. Never upload private or copyrighted material without permission.</small>
+        <small className="draft-note">Draft progress is kept while this form is open. Artist, venue, and context text may be processed by Google Gemini to suggest archive metadata. Never submit private or copyrighted material without permission.</small>
       </section>
     </div>
   );

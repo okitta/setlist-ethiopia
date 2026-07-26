@@ -5,12 +5,16 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("ships the Vercel-compatible Zema Archive experience", async () => {
-  const [page, app, auth, archiveApi, contributionApi, layout, css, packageJson, schema, envExample] = await Promise.all([
+  const [page, app, auth, archiveApi, contributionApi, suggestionsApi, analyticsApi, gemini, migration, layout, css, packageJson, schema, envExample] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/zema-app.tsx", root), "utf8"),
     readFile(new URL("app/auth/page.tsx", root), "utf8"),
     readFile(new URL("app/api/archive/route.ts", root), "utf8"),
     readFile(new URL("app/api/contributions/route.ts", root), "utf8"),
+    readFile(new URL("app/api/ai/suggestions/route.ts", root), "utf8"),
+    readFile(new URL("app/api/artists/[id]/analytics/route.ts", root), "utf8"),
+    readFile(new URL("lib/gemini.ts", root), "utf8"),
+    readFile(new URL("drizzle/0001_ai_identity.sql", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
     readFile(new URL("package.json", root), "utf8"),
@@ -44,6 +48,13 @@ test("ships the Vercel-compatible Zema Archive experience", async () => {
   assert.match(archiveApi, /stats:/);
   assert.match(contributionApi, /export async function POST/);
   assert.match(contributionApi, /setlist_items/);
+  assert.match(contributionApi, /resolveArtist/);
+  assert.match(contributionApi, /resolveVenue/);
+  assert.match(suggestionsApi, /generateStructured/);
+  assert.match(analyticsApi, /recentTopSongs/);
+  assert.match(gemini, /gemini-2\.5-flash-lite/);
+  assert.match(migration, /normalized_name/);
+  assert.match(app, /Most played songs/);
   assert.match(layout, /Zema Archive/);
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(packageJson, /"build": "next build --webpack"/);
