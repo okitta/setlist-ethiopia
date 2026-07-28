@@ -6,10 +6,14 @@
 -- (Plain SQL: the Drizzle `--> statement-breakpoint` markers have been removed.)
 -- ============================================================================
 
+-- NOTE: normalized_name (NOT NULL) and artists.description were added by the
+-- deployed app's migration drizzle/0001_ai_identity.sql. The scraper's loader
+-- populates normalized_name = lower(collapse_whitespace(trim(display_name|name))).
 CREATE TABLE IF NOT EXISTS "artist_names" (
     "id" serial PRIMARY KEY NOT NULL,
     "artist_id" integer NOT NULL,
     "name" text NOT NULL,
+    "normalized_name" text NOT NULL,
     "language" text,
     "script" text,
     "kind" text DEFAULT 'alias' NOT NULL
@@ -20,6 +24,8 @@ CREATE TABLE IF NOT EXISTS "artists" (
     "slug" text NOT NULL,
     "display_name" text NOT NULL,
     "native_name" text,
+    "normalized_name" text NOT NULL,
+    "description" text,
     "genre" text,
     "status" text DEFAULT 'community' NOT NULL,
     "created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -104,6 +110,7 @@ CREATE TABLE IF NOT EXISTS "venues" (
     "slug" text NOT NULL,
     "display_name" text NOT NULL,
     "native_name" text,
+    "normalized_name" text NOT NULL,
     "city" text NOT NULL,
     "country" text DEFAULT 'Ethiopia' NOT NULL,
     "address" text,

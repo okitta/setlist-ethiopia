@@ -3,13 +3,28 @@
 from ethioscrape import fixtures
 from ethioscrape.models import Dataset
 from ethioscrape.sources import jsonld, musicbrainz, setlistfm
-from ethioscrape.util import guess_language_script, is_ethiopic, slugify
+from ethioscrape.util import (
+    guess_language_script,
+    is_ethiopic,
+    normalize_name,
+    slugify,
+)
 
 
 def test_slugify_handles_ethiopic_and_latin():
     assert slugify("Aster Aweke") == "aster-aweke"
-    # Fully Ethiopic input has no ASCII -> readable fallback, never empty.
-    assert slugify("አስቴር") == "item"
+    # Fully Ethiopic names have no ASCII -> a stable hash slug, distinct per name,
+    # so they never collide on the unique slug index (the old "item" bug).
+    s1, s2 = slugify("አስቴር"), slugify("ሙላቱ")
+    assert s1 != "item" and s1 != s2
+    assert slugify("አስቴር") == s1  # stable across calls
+
+
+def test_normalize_name_matches_app_identity_key():
+    assert normalize_name("  Aster   Aweke ") == "aster aweke"
+    assert normalize_name("Mulatu Astatke") == "mulatu astatke"
+    # Amharic has no case; whitespace is still collapsed/trimmed.
+    assert normalize_name(" ሙላቱ  አስታጥቄ ") == "ሙላቱ አስታጥቄ"
 
 
 def test_script_detection():

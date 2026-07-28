@@ -11,6 +11,8 @@ Design choices:
 
 from __future__ import annotations
 
+import hashlib
+
 from sqlalchemy import (
     Column,
     DateTime,
@@ -25,6 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
 
 from .models import Dataset
+from .util import normalize_name
 
 metadata = MetaData()
 
@@ -32,18 +35,21 @@ artists = Table(
     "artists", metadata,
     Column("id", Integer, primary_key=True),
     Column("slug", Text), Column("display_name", Text), Column("native_name", Text),
+    Column("normalized_name", Text), Column("description", Text),
     Column("genre", Text), Column("status", Text),
 )
 artist_names = Table(
     "artist_names", metadata,
     Column("id", Integer, primary_key=True),
     Column("artist_id", Integer), Column("name", Text),
+    Column("normalized_name", Text),
     Column("language", Text), Column("script", Text), Column("kind", Text),
 )
 venues = Table(
     "venues", metadata,
     Column("id", Integer, primary_key=True),
     Column("slug", Text), Column("display_name", Text), Column("native_name", Text),
+    Column("normalized_name", Text),
     Column("city", Text), Column("country", Text), Column("address", Text),
 )
 events = Table(
@@ -94,6 +100,14 @@ def _normalise_url(url: str) -> str:
     )
 
 
+def _unique_slug(conn, table: Table, slug: str, seed: str) -> str:
+    """Return `slug` if free, otherwise a disambiguated variant. Guards the unique
+    slug index when two distinct records would otherwise produce the same slug."""
+    if conn.execute(select(table.c.id).where(table.c.slug == slug)).first() is None:
+        return slug
+    return f"{slug}-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:6]}"
+
+
 def load(dataset: Dataset, database_url: str) -> LoadStats:
     engine = create_engine(_normalise_url(database_url), future=True)
 
@@ -121,20 +135,34 @@ def load(dataset: Dataset, database_url: str) -> LoadStats:
         event_ids: dict[str, int] = {}
 
         # --- artists (+ names) --------------------------------------------
+        # Dedup by normalized_name (the app's identity key), which also populates the
+        # required normalized_name column. Slug is disambiguated if already taken.
         for a in dataset.artists.values():
-            stmt = (
-                pg_insert(artists)
-                .values(
-                    slug=a.slug, display_name=a.display_name,
-                    native_name=a.native_name, genre=a.genre, status=a.status,
+            norm = normalize_name(a.display_name)
+            existing_id = conn.execute(
+                select(artists.c.id).where(artists.c.normalized_name == norm)
+            ).scalar()
+            if existing_id is not None:
+                aid = existing_id
+                # Enrich only; never clobber curated fields with a blank.
+                conn.execute(
+                    artists.update()
+                    .where(artists.c.id == aid)
+                    .values(native_name=a.native_name, genre=a.genre)
                 )
-                .on_conflict_do_update(
-                    index_elements=["slug"],
-                    set_={"native_name": a.native_name, "genre": a.genre},
-                )
-                .returning(artists.c.id)
-            )
-            aid = conn.execute(stmt).scalar_one()
+            else:
+                aid = conn.execute(
+                    artists.insert()
+                    .values(
+                        slug=_unique_slug(conn, artists, a.slug, norm),
+                        display_name=a.display_name,
+                        normalized_name=norm,
+                        native_name=a.native_name,
+                        genre=a.genre,
+                        status=a.status,
+                    )
+                    .returning(artists.c.id)
+                ).scalar_one()
             artist_ids[a.slug] = aid
             stats["artists"] += 1
 
@@ -149,8 +177,8 @@ def load(dataset: Dataset, database_url: str) -> LoadStats:
                     continue
                 conn.execute(
                     artist_names.insert().values(
-                        artist_id=aid, name=n.name, language=n.language,
-                        script=n.script, kind=n.kind,
+                        artist_id=aid, name=n.name, normalized_name=normalize_name(n.name),
+                        language=n.language, script=n.script, kind=n.kind,
                     )
                 )
                 existing.add(n.name)
@@ -158,18 +186,30 @@ def load(dataset: Dataset, database_url: str) -> LoadStats:
 
         # --- venues -------------------------------------------------------
         for v in dataset.venues.values():
-            stmt = (
-                pg_insert(venues)
-                .values(
-                    slug=v.slug, display_name=v.display_name, native_name=v.native_name,
-                    city=v.city, country=v.country, address=v.address,
+            norm = normalize_name(v.display_name)
+            existing_id = conn.execute(
+                select(venues.c.id).where(venues.c.normalized_name == norm)
+            ).scalar()
+            if existing_id is not None:
+                vid = existing_id
+                conn.execute(
+                    venues.update().where(venues.c.id == vid).values(address=v.address)
                 )
-                .on_conflict_do_update(
-                    index_elements=["slug"], set_={"address": v.address}
-                )
-                .returning(venues.c.id)
-            )
-            venue_ids[v.slug] = conn.execute(stmt).scalar_one()
+            else:
+                vid = conn.execute(
+                    venues.insert()
+                    .values(
+                        slug=_unique_slug(conn, venues, v.slug, norm),
+                        display_name=v.display_name,
+                        normalized_name=norm,
+                        native_name=v.native_name,
+                        city=v.city,
+                        country=v.country,
+                        address=v.address,
+                    )
+                    .returning(venues.c.id)
+                ).scalar_one()
+            venue_ids[v.slug] = vid
             stats["venues"] += 1
 
         # --- events -------------------------------------------------------
